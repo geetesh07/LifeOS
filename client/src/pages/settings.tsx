@@ -232,9 +232,202 @@ function WorkspaceItem({
   );
 }
 
+function GoogleOAuthCredentials({ workspaceId }: { workspaceId: string }) {
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Load existing credentials
+  const { data: credentials, refetch: refetchCredentials } = useQuery({
+    queryKey: [`/api/google-oauth/credentials/${workspaceId}`],
+    queryFn: async () => {
+      const response = await fetch(`/api/google-oauth/credentials/${workspaceId}`);
+      const data = await response.json();
+      if (data.configured) {
+        setClientId(data.clientId);
+      }
+      return data;
+    },
+  });
+
+  // Check connection status
+  const { data: connectionStatus, refetch: refetchStatus } = useQuery({
+    queryKey: [`/api/google-calendar/status`, user?.id, workspaceId],
+    queryFn: async () => {
+      if (!user?.id) return { connected: false };
+      const response = await fetch(`/api/google-calendar/status?userId=${user.id}&workspaceId=${workspaceId}`);
+      return await response.json();
+    },
+    enabled: !!user?.id,
+  });
+
+  const handleSave = async () => {
+    if (!clientId || !clientSecret) {
+      toast({ title: "Please fill in both fields", variant: "destructive" });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await apiRequest("POST", "/api/google-oauth/credentials", {
+        workspaceId,
+        clientId,
+        clientSecret,
+      });
+
+      toast({ title: "Credentials saved successfully!" });
+      refetchCredentials();
+    } catch (error) {
+      toast({ title: "Failed to save credentials", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleConnect = async () => {
+    try {
+      const response = await fetch(`/api/google-calendar/auth-url?userId=${user?.id}&workspaceId=${workspaceId}`);
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        toast({ title: "Failed to get auth URL", variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Failed to initiate connection", variant: "destructive" });
+    }
+  };
+
+  const handleDisconnect = async () => {
+    try {
+      await apiRequest("POST", "/api/google-calendar/disconnect", { userId: user?.id });
+      toast({ title: "Disconnected from Google Calendar" });
+      refetchStatus();
+    } catch (error) {
+      toast({ title: "Failed to disconnect", variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Client ID</label>
+          <Input
+            type="text"
+            placeholder="Enter Google OAuth Client ID"
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+            className="font-mono"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Client Secret</label>
+          <Input
+            type="password"
+            placeholder="Enter Google OAuth Client Secret"
+            value={clientSecret}
+            onChange={(e) => setClientSecret(e.target.value)}
+            className="font-mono"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Redirect URI</label>
+          <div className="flex gap-2">
+            <Input
+              value="http://localhost:7777/api/google-calendar/callback"
+              readOnly
+              className="font-mono text-xs"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                navigator.clipboard.writeText('http://localhost:7777/api/google-calendar/callback');
+                toast({ title: "Copied to clipboard!" });
+              }}
+            >
+              Copy
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Add this to Google Cloud Console OAuth settings
+          </p>
+        </div>
+
+        <Button onClick={handleSave} disabled={isSaving} className="w-full">
+          {isSaving ? "Saving..." : "Save Credentials"}
+        </Button>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-4">
+        <h3 className="font-medium">Connection Status</h3>
+        {credentials?.configured ? (
+          <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/30">
+            <div className="flex items-center gap-3">
+              {connectionStatus?.picture ? (
+                <img src={connectionStatus.picture} alt="Profile" className="w-10 h-10 rounded-full" />
+              ) : (
+                <div className={`w-3 h-3 rounded-full ${connectionStatus?.connected ? "bg-green-500" : "bg-yellow-500"}`} />
+              )}
+              <div>
+                <p className="font-medium">
+                  {connectionStatus?.connected ? "Connected" : "Not Connected"}
+                </p>
+                {connectionStatus?.email && (
+                  <p className="text-sm text-muted-foreground">{connectionStatus.email}</p>
+                )}
+                {!connectionStatus?.email && (
+                  <p className="text-xs text-muted-foreground">
+                    {connectionStatus?.connected
+                      ? "Your Google Calendar events will be synced"
+                      : "Connect your account to sync events"}
+                  </p>
+                )}
+              </div>
+            </div>
+            {connectionStatus?.connected ? (
+              <Button variant="destructive" size="sm" onClick={handleDisconnect}>
+                Disconnect
+              </Button>
+            ) : (
+              <Button variant="default" size="sm" onClick={handleConnect}>
+                Connect Google Calendar
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="p-4 border rounded-lg bg-yellow-500/10 text-yellow-600 text-sm">
+            Please configure your Client ID and Secret above to enable Google Calendar integration.
+          </div>
+        )}
+      </div>
+
+      <details className="border rounded-lg p-4">
+        <summary className="cursor-pointer font-medium text-sm">
+          📖 Setup Instructions
+        </summary>
+        <ol className="list-decimal list-inside space-y-2 mt-4 text-sm text-muted-foreground ml-2">
+          <li>Go to <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Google Cloud Console</a></li>
+          <li>Create project → Enable Google Calendar API</li>
+          <li>Create OAuth 2.0 Client ID (Web application)</li>
+          <li>Add redirect URI above</li>
+          <li>Copy Client ID & Secret here and save</li>
+        </ol>
+      </details>
+    </div>
+  );
+}
+
 export default function Settings() {
   const { theme, setTheme } = useTheme();
-  const { workspaces, setWorkspaces } = useWorkspace();
+  const { workspaces, setWorkspaces, currentWorkspace } = useWorkspace();
   const { user } = useAuth();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -554,6 +747,24 @@ export default function Settings() {
           )}
         </CardContent>
       </Card>
+
+      {/* Google OAuth Credentials */}
+      {currentWorkspace && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5" />
+              Google Calendar Credentials
+            </CardTitle>
+            <CardDescription>
+              Configure Google OAuth for Calendar integration
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <GoogleOAuthCredentials workspaceId={currentWorkspace.id} />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

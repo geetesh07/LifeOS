@@ -1,7 +1,7 @@
 import {
   workspaces, clients, projects, tasks, timeEntries,
   habits, habitCompletions, diaryEntries, notes, events, userSettings,
-  taskStatuses,
+  taskStatuses, googleOAuthSettings, quickTodos,
   type Workspace, type InsertWorkspace,
   type Client, type InsertClient,
   type Project, type InsertProject,
@@ -14,6 +14,9 @@ import {
   type Note, type InsertNote,
   type Event, type InsertEvent,
   type UserSettings, type InsertUserSettings,
+  type QuickTodo, type InsertQuickTodo,
+  type GoogleOAuthSettings,
+  googleCalendarTokens, type GoogleCalendarTokens, type InsertGoogleCalendarTokens,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, gte, lte, sql } from "drizzle-orm";
@@ -94,6 +97,7 @@ export interface IStorage {
   // Events
   getEvents(workspaceId: string): Promise<Event[]>;
   getEvent(id: string): Promise<Event | undefined>;
+  getEventByGoogleId(googleEventId: string): Promise<Event | undefined>;
   createEvent(data: InsertEvent): Promise<Event>;
   updateEvent(id: string, data: Partial<Event>): Promise<Event | undefined>;
   deleteEvent(id: string): Promise<boolean>;
@@ -101,6 +105,11 @@ export interface IStorage {
   // User Settings
   getUserSettings(userId: string): Promise<UserSettings | undefined>;
   updateUserSettings(userId: string, data: Partial<UserSettings>): Promise<UserSettings>;
+
+  // Google Calendar Tokens
+  getGoogleCalendarTokens(userId: string): Promise<GoogleCalendarTokens | undefined>;
+  saveGoogleCalendarTokens(data: InsertGoogleCalendarTokens): Promise<GoogleCalendarTokens>;
+  deleteGoogleCalendarTokens(userId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -246,6 +255,76 @@ export class DatabaseStorage implements IStorage {
   async deleteTask(id: string): Promise<boolean> {
     const result = await db.delete(tasks).where(eq(tasks.id, id)).returning();
     return result.length > 0;
+  }
+
+  // Quick Todos
+  async getQuickTodos(workspaceId: string) {
+    return db.select().from(quickTodos).where(eq(quickTodos.workspaceId, workspaceId));
+  }
+
+  async createQuickTodo(data: InsertQuickTodo) {
+    const [todo] = await db.insert(quickTodos).values(data).returning();
+    return todo;
+  }
+
+  async deleteQuickTodo(id: string) {
+    await db.delete(quickTodos).where(eq(quickTodos.id, id));
+    return true;
+  }
+
+  async toggleQuickTodo(id: string) {
+    const [todo] = await db.select().from(quickTodos).where(eq(quickTodos.id, id));
+    if (!todo) return null;
+
+    const [updated] = await db
+      .update(quickTodos)
+      .set({ completed: !todo.completed })
+      .where(eq(quickTodos.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Google OAuth Credentials
+  async getGoogleOAuthCredentials(workspaceId: string) {
+    const [credentials] = await db
+      .select()
+      .from(googleOAuthSettings)
+      .where(eq(googleOAuthSettings.workspaceId, workspaceId))
+      .limit(1);
+    return credentials;
+  }
+
+  async saveGoogleOAuthCredentials(workspaceId: string, clientId: string, clientSecret: string) {
+    const existing = await this.getGoogleOAuthCredentials(workspaceId);
+
+    if (existing) {
+      // Update
+      const [updated] = await db
+        .update(googleOAuthSettings)
+        .set({ clientId, clientSecret, updatedAt: new Date() })
+        .where(eq(googleOAuthSettings.workspaceId, workspaceId))
+        .returning();
+      return updated;
+    } else {
+      // Create
+      const [created] = await db
+        .insert(googleOAuthSettings)
+        .values({
+          id: crypto.randomUUID(),
+          workspaceId,
+          clientId,
+          clientSecret,
+        })
+        .returning();
+      return created;
+    }
+  }
+
+  async deleteGoogleOAuthCredentials(workspaceId: string) {
+    await db
+      .delete(googleOAuthSettings)
+      .where(eq(googleOAuthSettings.workspaceId, workspaceId));
+    return true;
   }
 
   // Time Entries
@@ -429,8 +508,13 @@ export class DatabaseStorage implements IStorage {
     return event;
   }
 
-  async createEvent(data: InsertEvent): Promise<Event> {
-    const [event] = await db.insert(events).values(data).returning();
+  async getEventByGoogleId(googleEventId: string): Promise<Event | undefined> {
+    const [event] = await db.select().from(events).where(eq(events.googleEventId, googleEventId));
+    return event;
+  }
+
+  async createEvent(insertEvent: InsertEvent): Promise<Event> {
+    const [event] = await db.insert(events).values(insertEvent).returning();
     return event;
   }
 
@@ -458,6 +542,37 @@ export class DatabaseStorage implements IStorage {
     }
     const [created] = await db.insert(userSettings).values({ ...data, userId } as InsertUserSettings).returning();
     return created;
+  }
+
+  // Google Calendar Tokens
+  async getGoogleCalendarTokens(userId: string): Promise<GoogleCalendarTokens | undefined> {
+    const [tokens] = await db.select().from(googleCalendarTokens).where(eq(googleCalendarTokens.userId, userId));
+    return tokens;
+  }
+
+  async saveGoogleCalendarTokens(data: InsertGoogleCalendarTokens): Promise<GoogleCalendarTokens> {
+    const existing = await this.getGoogleCalendarTokens(data.userId);
+    if (existing) {
+      const [updated] = await db
+        .update(googleCalendarTokens)
+        .set({
+          accessToken: data.accessToken,
+          // Only update refresh token if we got a new one
+          refreshToken: data.refreshToken || existing.refreshToken,
+          expiryDate: data.expiryDate,
+          updatedAt: new Date(),
+        })
+        .where(eq(googleCalendarTokens.userId, data.userId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(googleCalendarTokens).values(data).returning();
+    return created;
+  }
+
+  async deleteGoogleCalendarTokens(userId: string): Promise<boolean> {
+    const result = await db.delete(googleCalendarTokens).where(eq(googleCalendarTokens.userId, userId)).returning();
+    return result.length > 0;
   }
 }
 

@@ -134,6 +134,28 @@ export const quickTodosRelations = relations(quickTodos, ({ one }) => ({
   workspace: one(workspaces, { fields: [quickTodos.workspaceId], references: [workspaces.id] }),
 }));
 
+// Google OAuth Settings - workspace-specific OAuth credentials
+export const googleOAuthSettings = pgTable("google_oauth_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  workspaceId: varchar("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  clientId: text("client_id").notNull(),
+  clientSecret: text("client_secret").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Google Calendar Tokens - user-specific OAuth tokens
+export const googleCalendarTokens = pgTable("google_calendar_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: text("user_id").notNull(), // Link to the user (auth.uid())
+  workspaceId: varchar("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }), // Optional: link to workspace if needed
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  expiryDate: real("expiry_date").notNull(), // Timestamp in milliseconds
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Tasks - core productivity unit
 export const tasks = pgTable("tasks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -289,7 +311,9 @@ export const insertEventSchema = createInsertSchema(events).omit({ id: true });
 export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({ id: true });
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true });
 export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true });
-export const insertQuickTodoSchema = createInsertSchema(quickTodos).omit({ id: true });
+export const insertQuickTodoSchema = createInsertSchema(quickTodos);
+export const insertGoogleOAuthSettingsSchema = createInsertSchema(googleOAuthSettings);
+export const insertGoogleCalendarTokensSchema = createInsertSchema(googleCalendarTokens);
 
 // Types
 export type Workspace = typeof workspaces.$inferSelect;
@@ -322,6 +346,10 @@ export type Expense = typeof expenses.$inferSelect;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 export type QuickTodo = typeof quickTodos.$inferSelect;
 export type InsertQuickTodo = z.infer<typeof insertQuickTodoSchema>;
+export type GoogleOAuthSettings = typeof googleOAuthSettings.$inferSelect;
+export type InsertGoogleOAuthSettings = z.infer<typeof insertGoogleOAuthSettingsSchema>;
+export type GoogleCalendarTokens = typeof googleCalendarTokens.$inferSelect;
+export type InsertGoogleCalendarTokens = z.infer<typeof insertGoogleCalendarTokensSchema>;
 
 // Legacy user schema for compatibility
 export const users = pgTable("users", {

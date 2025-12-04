@@ -34,6 +34,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useWorkspace } from "@/lib/workspace-context";
+import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -84,6 +85,7 @@ function EventForm({
   selectedDate?: Date;
 }) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [title, setTitle] = useState(event?.title || "");
   const [description, setDescription] = useState(event?.description || "");
   const [location, setLocation] = useState(event?.location || "");
@@ -110,12 +112,15 @@ function EventForm({
     event?.endTime ? format(new Date(event.endTime), "HH:mm") : "10:00"
   );
 
+
+
   const createMutation = useMutation({
-    mutationFn: async (data: InsertEvent) => {
-      return apiRequest("POST", "/api/events", data);
+    mutationFn: async (data: InsertEvent & { userId?: string }) => {
+      return apiRequest("POST", "/api/events", { ...data, userId: user?.id });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/events?workspaceId=${workspaceId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/google-calendar/events"] }); // Refresh Google events too
       toast({ title: "Event created successfully" });
       onClose();
     },
@@ -125,11 +130,12 @@ function EventForm({
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (data: Partial<Event>) => {
-      return apiRequest("PATCH", `/api/events/${event?.id}`, data);
+    mutationFn: async (data: Partial<Event> & { userId?: string }) => {
+      return apiRequest("PATCH", `/api/events/${event?.id}`, { ...data, userId: user?.id });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/events?workspaceId=${workspaceId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/google-calendar/events"] });
       toast({ title: "Event updated successfully" });
       onClose();
     },
@@ -279,13 +285,42 @@ function EventForm({
         </div>
       </div>
 
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={isPending} data-testid="button-save-event">
-          {isPending ? "Saving..." : event ? "Update Event" : "Create Event"}
-        </Button>
+      <DialogFooter className="flex justify-between sm:justify-between">
+        {event && (
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={async () => {
+              if (confirm("Are you sure you want to delete this event?")) {
+                try {
+                  // Pass userId as query param for delete
+                  const { user } = useAuth(); // This won't work inside callback, need to capture from parent scope
+                  // Actually EventForm is a component, so we can use hook at top level.
+                  // But we already have user from useAuth in Calendar component, let's pass it down or use hook here.
+                  // We added useAuth to EventForm in previous step.
+
+                  await apiRequest("DELETE", `/api/events/${event.id}?userId=${user?.id}`);
+                  queryClient.invalidateQueries({ queryKey: [`/api/events?workspaceId=${workspaceId}`] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/google-calendar/events"] });
+                  toast({ title: "Event deleted successfully" });
+                  onClose();
+                } catch (error) {
+                  toast({ title: "Failed to delete event", variant: "destructive" });
+                }
+              }
+            }}
+          >
+            Delete
+          </Button>
+        )}
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={isPending} data-testid="button-save-event">
+            {isPending ? "Saving..." : event ? "Update Event" : "Create Event"}
+          </Button>
+        </div>
       </DialogFooter>
     </form>
   );
@@ -368,8 +403,28 @@ export default function Calendar() {
     enabled: !!currentWorkspace,
   });
 
+  const { user } = useAuth();
   const { data: googleEvents, isLoading: googleLoading, refetch: refetchGoogle } = useQuery<any[]>({
-    queryKey: ["/api/google-calendar/events"],
+    queryKey: ["/api/google-calendar/events", user?.id, currentWorkspace?.id],
+    queryFn: async () => {
+      const userId = user?.id;
+      const workspaceId = currentWorkspace?.id;
+
+      console.log("[Calendar] Fetching Google events", { userId, workspaceId });
+
+      if (!userId || !workspaceId) {
+        console.log("[Calendar] Missing userId or workspaceId, skipping fetch");
+        return [];
+      }
+
+      const response = await fetch(`/api/google-calendar/events?userId=${userId}&workspaceId=${workspaceId}`);
+      if (!response.ok) {
+        console.error("[Calendar] Failed to fetch Google events", await response.text());
+        return [];
+      }
+      return await response.json();
+    },
+    enabled: !!user?.id && !!currentWorkspace?.id,
   });
 
   const syncMutation = useMutation({

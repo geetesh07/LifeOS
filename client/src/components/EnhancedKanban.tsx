@@ -49,13 +49,18 @@ function SortableTaskCard({ task, statusColor, onEdit, onDelete }: SortableTaskC
         urgent: "bg-red-500",
     };
 
+    // Use status color for card background
+    const cardBgColor = getColumnBackgroundColor(statusColor, isDark);
+    const cardTextColor = getColumnTextColor(statusColor, isDark);
+
     return (
         <Card
             ref={setNodeRef}
             style={{
                 ...style,
-                borderLeft: `4px solid ${statusColor}`,
-                backgroundColor: getCardBackgroundOnColumn(isDark),
+                backgroundColor: cardBgColor,
+                color: cardTextColor,
+                border: 'none',
             }}
             {...attributes}
             {...listeners}
@@ -152,6 +157,7 @@ function DroppableStatusColumn({ status, tasks, onEdit, onDelete }: DroppableSta
                             <SortableTaskCard
                                 key={task.id}
                                 task={task}
+                                statusColor={status.color}
                                 onEdit={() => onEdit(task)}
                                 onDelete={() => onDelete(task.id)}
                             />
