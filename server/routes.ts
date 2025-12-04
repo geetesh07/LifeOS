@@ -1,8 +1,8 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { 
-  insertWorkspaceSchema, insertClientSchema, insertProjectSchema, 
+import {
+  insertWorkspaceSchema, insertClientSchema, insertProjectSchema,
   insertTaskSchema, insertTimeEntrySchema, insertHabitSchema,
   insertHabitCompletionSchema, insertDiaryEntrySchema, insertNoteSchema,
   insertEventSchema,
@@ -475,5 +475,30 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   app.post("/api/google-calendar/sync", async (req, res) => {
     // Sync with Google Calendar
     res.json({ success: true, message: "Calendar sync initiated" });
+  });
+
+  // User Settings
+  app.get("/api/user-settings", async (req, res) => {
+    const userId = req.query.userId as string;
+    if (!userId) {
+      return res.status(400).json({ message: "userId is required" });
+    }
+    const settings = await storage.getUserSettings(userId);
+    res.json(settings || {
+      userId,
+      theme: "system",
+      showQuotes: true,
+      notificationsEnabled: true,
+      weekStartsOn: 1
+    });
+  });
+
+  app.patch("/api/user-settings", async (req, res) => {
+    const userId = req.body.userId;
+    if (!userId) {
+      return res.status(400).json({ message: "userId is required" });
+    }
+    const settings = await storage.updateUserSettings(userId, req.body);
+    res.json(settings);
   });
 }

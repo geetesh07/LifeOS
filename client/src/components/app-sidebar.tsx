@@ -27,6 +27,9 @@ import {
 } from "@/components/ui/sidebar";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 import { useWorkspace } from "@/lib/workspace-context";
+import { useAuth } from "@/lib/auth-context";
+import { LogOut } from "lucide-react";
+import { Button } from "./ui/button";
 
 const mainNavItems = [
   {
@@ -86,6 +89,37 @@ const manageItems = [
     icon: BarChart3,
   },
 ];
+
+function LogoutButton() {
+  const { user, signOut } = useAuth();
+  const [, setLocation] = useLocation();
+
+  const handleLogout = async () => {
+    await signOut();
+    setLocation('/login');
+  };
+
+  if (!user) return null;
+
+  return (
+    <div className="px-2 py-2">
+      <div className="flex items-center justify-between px-2 py-2 rounded-md bg-sidebar-accent/50">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 flex-shrink-0"
+          onClick={handleLogout}
+          title="Logout"
+        >
+          <LogOut className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 interface AppSidebarProps {
   onAddWorkspace?: () => void;
@@ -196,6 +230,7 @@ export function AppSidebar({ onAddWorkspace }: AppSidebarProps) {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <LogoutButton />
       </SidebarFooter>
     </Sidebar>
   );

@@ -1,5 +1,5 @@
-import { 
-  workspaces, clients, projects, tasks, timeEntries, 
+import {
+  workspaces, clients, projects, tasks, timeEntries,
   habits, habitCompletions, diaryEntries, notes, events, userSettings,
   type Workspace, type InsertWorkspace,
   type Client, type InsertClient,
@@ -89,8 +89,8 @@ export interface IStorage {
   deleteEvent(id: string): Promise<boolean>;
 
   // User Settings
-  getUserSettings(): Promise<UserSettings | undefined>;
-  updateUserSettings(data: Partial<UserSettings>): Promise<UserSettings>;
+  getUserSettings(userId: string): Promise<UserSettings | undefined>;
+  updateUserSettings(userId: string, data: Partial<UserSettings>): Promise<UserSettings>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -259,9 +259,9 @@ export class DatabaseStorage implements IStorage {
   async getHabitCompletions(workspaceId: string): Promise<HabitCompletion[]> {
     const workspaceHabits = await this.getHabits(workspaceId);
     const habitIds = workspaceHabits.map(h => h.id);
-    
+
     if (habitIds.length === 0) return [];
-    
+
     const thirtyDaysAgo = subDays(new Date(), 30);
     return db.select().from(habitCompletions)
       .where(gte(habitCompletions.date, thirtyDaysAgo));
@@ -269,18 +269,18 @@ export class DatabaseStorage implements IStorage {
 
   async createHabitCompletion(data: InsertHabitCompletion): Promise<HabitCompletion> {
     const [completion] = await db.insert(habitCompletions).values(data).returning();
-    
+
     // Update habit streak
     const habit = await this.getHabit(data.habitId);
     if (habit) {
       const newStreak = habit.currentStreak + 1;
       const longestStreak = Math.max(newStreak, habit.longestStreak);
-      await this.updateHabit(habit.id, { 
-        currentStreak: newStreak, 
-        longestStreak 
+      await this.updateHabit(habit.id, {
+        currentStreak: newStreak,
+        longestStreak
       });
     }
-    
+
     return completion;
   }
 
@@ -307,7 +307,7 @@ export class DatabaseStorage implements IStorage {
   async getDiaryEntryByDate(workspaceId: string, date: Date): Promise<DiaryEntry | undefined> {
     const dayStart = startOfDay(date);
     const dayEnd = endOfDay(date);
-    
+
     const [entry] = await db.select().from(diaryEntries)
       .where(and(
         workspaceId ? eq(diaryEntries.workspaceId, workspaceId) : sql`TRUE`,
@@ -391,18 +391,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   // User Settings
-  async getUserSettings(): Promise<UserSettings | undefined> {
-    const [settings] = await db.select().from(userSettings).limit(1);
+  async getUserSettings(userId: string): Promise<UserSettings | undefined> {
+    const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
     return settings;
   }
 
-  async updateUserSettings(data: Partial<UserSettings>): Promise<UserSettings> {
-    const existing = await this.getUserSettings();
+  async updateUserSettings(userId: string, data: Partial<UserSettings>): Promise<UserSettings> {
+    const existing = await this.getUserSettings(userId);
     if (existing) {
       const [updated] = await db.update(userSettings).set(data).where(eq(userSettings.id, existing.id)).returning();
       return updated;
     }
-    const [created] = await db.insert(userSettings).values(data as InsertUserSettings).returning();
+    const [created] = await db.insert(userSettings).values({ ...data, userId } as InsertUserSettings).returning();
     return created;
   }
 }

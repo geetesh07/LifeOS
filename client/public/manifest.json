@@ -3,16 +3,43 @@
   "short_name": "LifeFlow",
   "description": "Your comprehensive life management app for tracking work, habits, time, and goals.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#0ea5e9",
-  "orientation": "any",
+  "background_color": "#0f0e14",
+  "theme_color": "#7c3aed",
+  "orientation": "portrait-primary",
   "icons": [
     {
       "src": "/favicon.png",
-      "sizes": "192x192",
+      "sizes": "any",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "categories": [
+    "productivity",
+    "lifestyle"
+  ],
+  "shortcuts": [
+    {
+      "name": "New Task",
+      "url": "/tasks",
+      "icons": [
+        {
+          "src": "/favicon.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Time Tracker",
+      "url": "/time",
+      "icons": [
+        {
+          "src": "/favicon.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }

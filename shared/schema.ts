@@ -6,6 +6,7 @@ import { z } from "zod";
 // Workspaces - containers for organizing life areas
 export const workspaces = pgTable("workspaces", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: text("user_id").notNull(),
   name: text("name").notNull(),
   color: text("color").notNull().default("#3B82F6"),
   icon: text("icon").notNull().default("briefcase"),
@@ -192,6 +193,7 @@ export const eventsRelations = relations(events, ({ one }) => ({
 // User Settings
 export const userSettings = pgTable("user_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: text("user_id").notNull(),
   theme: text("theme").notNull().default("system"), // light, dark, system
   defaultWorkspaceId: varchar("default_workspace_id"),
   showQuotes: boolean("show_quotes").notNull().default(true),

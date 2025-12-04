@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CardSkeleton } from "@/components/LoadingSkeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
@@ -22,8 +23,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { 
-  Plus, 
+import {
+  Plus,
   Search,
   FileText,
   Pin,
@@ -62,9 +63,8 @@ function NoteCard({
 }) {
   return (
     <Card
-      className={`cursor-pointer transition-all hover-elevate group ${
-        isSelected ? "ring-2 ring-primary" : ""
-      }`}
+      className={`cursor-pointer transition-all hover-elevate group ${isSelected ? "ring-2 ring-primary" : ""
+        }`}
       style={note.color ? { backgroundColor: note.color + "50" } : undefined}
       onClick={onClick}
       data-testid={`note-card-${note.id}`}
@@ -80,8 +80,8 @@ function NoteCard({
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                <Button 
-                  variant="ghost" 
+                <Button
+                  variant="ghost"
                   size="icon"
                   className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                 >
@@ -103,7 +103,7 @@ function NoteCard({
                   )}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem 
+                <DropdownMenuItem
                   onClick={(e) => { e.stopPropagation(); onDelete(); }}
                   className="text-destructive"
                 >
@@ -160,8 +160,8 @@ function NoteEditor({
 
   useEffect(() => {
     if (note) {
-      const changed = title !== note.title || 
-        content !== note.content || 
+      const changed = title !== note.title ||
+        content !== note.content ||
         color !== note.color ||
         JSON.stringify(tags) !== JSON.stringify(note.tags);
       setHasChanges(changed);
@@ -179,7 +179,7 @@ function NoteEditor({
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/notes"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/notes?workspaceId=${workspaceId}`] });
       toast({ title: "Note saved" });
       onSave();
     },
@@ -262,12 +262,11 @@ function NoteEditor({
               <button
                 key={option.label}
                 type="button"
-                className={`w-6 h-6 rounded-full border-2 transition-all ${
-                  color === option.value 
-                    ? "border-primary" 
-                    : "border-transparent hover:border-muted-foreground"
-                }`}
-                style={{ 
+                className={`w-6 h-6 rounded-full border-2 transition-all ${color === option.value
+                  ? "border-primary"
+                  : "border-transparent hover:border-muted-foreground"
+                  }`}
+                style={{
                   backgroundColor: option.value || "transparent",
                   border: !option.value ? "2px dashed var(--border)" : undefined,
                 }}
@@ -310,7 +309,7 @@ export default function Notes() {
   const [isCreating, setIsCreating] = useState(false);
 
   const { data: notes, isLoading } = useQuery<Note[]>({
-    queryKey: ["/api/notes", currentWorkspace?.id],
+    queryKey: [`/api/notes?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
@@ -319,7 +318,7 @@ export default function Notes() {
       return apiRequest("PATCH", `/api/notes/${id}`, { isPinned });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/notes"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/notes?workspaceId=${currentWorkspace?.id}`] });
     },
   });
 
@@ -328,7 +327,7 @@ export default function Notes() {
       return apiRequest("DELETE", `/api/notes/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/notes"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/notes?workspaceId=${currentWorkspace?.id}`] });
       toast({ title: "Note deleted" });
       if (selectedNote?.id === deleteMutation.variables) {
         setSelectedNote(null);
@@ -336,7 +335,7 @@ export default function Notes() {
     },
   });
 
-  const filteredNotes = notes?.filter(note => 
+  const filteredNotes = notes?.filter(note =>
     note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     note.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
     note.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -397,11 +396,7 @@ export default function Notes() {
 
           <ScrollArea className="h-[calc(100vh-280px)]">
             {isLoading ? (
-              <div className="grid gap-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <Skeleton key={i} className="h-32 w-full" />
-                ))}
-              </div>
+              <CardSkeleton count={4} className="grid-cols-1" />
             ) : filteredNotes?.length === 0 ? (
               <Card>
                 <CardContent className="py-16 text-center">

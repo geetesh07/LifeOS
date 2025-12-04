@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CardSkeleton } from "@/components/LoadingSkeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Dialog,
@@ -23,8 +24,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { 
-  Plus, 
+import {
+  Plus,
   Users,
   MoreHorizontal,
   Edit,
@@ -71,7 +72,7 @@ function ClientForm({
       return apiRequest("POST", "/api/clients", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/clients?workspaceId=${workspaceId}`] });
       toast({ title: "Client created successfully" });
       onClose();
     },
@@ -85,7 +86,7 @@ function ClientForm({
       return apiRequest("PATCH", `/api/clients/${client?.id}`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/clients?workspaceId=${workspaceId}`] });
       toast({ title: "Client updated successfully" });
       onClose();
     },
@@ -179,9 +180,8 @@ function ClientForm({
             <button
               key={option.value}
               type="button"
-              className={`w-8 h-8 rounded-full transition-all ${
-                color === option.value ? "ring-2 ring-offset-2 ring-primary" : ""
-              }`}
+              className={`w-8 h-8 rounded-full transition-all ${color === option.value ? "ring-2 ring-offset-2 ring-primary" : ""
+                }`}
               style={{ backgroundColor: option.value }}
               onClick={() => setColor(option.value)}
             />
@@ -242,8 +242,8 @@ function ClientCard({
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 size="icon"
                 className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
               >
@@ -256,7 +256,7 @@ function ClientCard({
                 Edit
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={() => onDelete(client.id)}
                 className="text-destructive"
               >
@@ -311,7 +311,7 @@ export default function Clients() {
   const [editingClient, setEditingClient] = useState<Client | undefined>();
 
   const { data: clients, isLoading } = useQuery<Client[]>({
-    queryKey: ["/api/clients", currentWorkspace?.id],
+    queryKey: [`/api/clients?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
@@ -325,7 +325,7 @@ export default function Clients() {
       return apiRequest("DELETE", `/api/clients/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/clients?workspaceId=${currentWorkspace?.id}`] });
       toast({ title: "Client deleted" });
     },
   });
@@ -344,7 +344,7 @@ export default function Clients() {
     return projects?.filter(p => p.clientId === clientId).length || 0;
   };
 
-  const filteredClients = clients?.filter(client => 
+  const filteredClients = clients?.filter(client =>
     client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     client.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     client.company?.toLowerCase().includes(searchQuery.toLowerCase())

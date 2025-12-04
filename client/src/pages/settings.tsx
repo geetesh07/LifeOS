@@ -21,7 +21,7 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { 
+import {
   Sun,
   Moon,
   Monitor,
@@ -136,11 +136,10 @@ function WorkspaceForm({
               <button
                 key={option.value}
                 type="button"
-                className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
-                  icon === option.value 
-                    ? "bg-primary text-primary-foreground" 
-                    : "bg-muted hover:bg-muted/80"
-                }`}
+                className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${icon === option.value
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted hover:bg-muted/80"
+                  }`}
                 onClick={() => setIcon(option.value)}
                 data-testid={`icon-${option.value}`}
               >
@@ -158,9 +157,8 @@ function WorkspaceForm({
             <button
               key={option.value}
               type="button"
-              className={`w-8 h-8 rounded-full transition-all ${
-                color === option.value ? "ring-2 ring-offset-2 ring-primary" : ""
-              }`}
+              className={`w-8 h-8 rounded-full transition-all ${color === option.value ? "ring-2 ring-offset-2 ring-primary" : ""
+                }`}
               style={{ backgroundColor: option.value }}
               onClick={() => setColor(option.value)}
               data-testid={`color-${option.label.toLowerCase()}`}
@@ -193,12 +191,12 @@ function WorkspaceItem({
   const Icon = iconOptions.find(i => i.value === workspace.icon)?.icon || Briefcase;
 
   return (
-    <div 
+    <div
       className="flex items-center justify-between p-4 rounded-lg bg-muted/30 hover-elevate transition-all"
       data-testid={`workspace-settings-${workspace.id}`}
     >
       <div className="flex items-center gap-3">
-        <div 
+        <div
           className="w-10 h-10 rounded-lg flex items-center justify-center"
           style={{ backgroundColor: workspace.color + "20" }}
         >
@@ -212,15 +210,15 @@ function WorkspaceItem({
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           size="icon"
           onClick={() => onEdit(workspace)}
         >
           <Edit className="h-4 w-4" />
         </Button>
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           size="icon"
           onClick={() => onDelete(workspace.id)}
           className="text-destructive hover:text-destructive"
@@ -235,15 +233,35 @@ function WorkspaceItem({
 export default function Settings() {
   const { theme, setTheme } = useTheme();
   const { workspaces, setWorkspaces } = useWorkspace();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingWorkspace, setEditingWorkspace] = useState<Workspace | undefined>();
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [showQuotes, setShowQuotes] = useState(true);
-  const [weekStartsOn, setWeekStartsOn] = useState("1");
 
   const { data: workspacesData } = useQuery<Workspace[]>({
     queryKey: ["/api/workspaces"],
+  });
+
+  const { data: userSettings, isLoading: settingsLoading } = useQuery<UserSettings>({
+    queryKey: [`/api/user-settings?userId=${user?.id}`],
+    enabled: !!user?.id,
+  });
+
+  const updateSettingsMutation = useMutation({
+    mutationFn: async (data: Partial<UserSettings>) => {
+      return apiRequest("PATCH", "/api/user-settings", { ...data, userId: user?.id });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/user-settings?userId=${user?.id}`] });
+      toast({ title: "Settings updated" });
+      // Apply theme immediately if changed
+      if (data.theme && data.theme !== theme) {
+        setTheme(data.theme as any);
+      }
+    },
+    onError: () => {
+      toast({ title: "Failed to update settings", variant: "destructive" });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -273,6 +291,10 @@ export default function Settings() {
     setEditingWorkspace(undefined);
     setIsDialogOpen(true);
   };
+
+  if (settingsLoading) {
+    return <div>Loading settings...</div>;
+  }
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -305,7 +327,7 @@ export default function Settings() {
               <Button
                 variant={theme === "light" ? "secondary" : "ghost"}
                 size="sm"
-                onClick={() => setTheme("light")}
+                onClick={() => updateSettingsMutation.mutate({ theme: "light" })}
                 data-testid="button-theme-light"
               >
                 <Sun className="h-4 w-4 mr-2" />
@@ -314,7 +336,7 @@ export default function Settings() {
               <Button
                 variant={theme === "dark" ? "secondary" : "ghost"}
                 size="sm"
-                onClick={() => setTheme("dark")}
+                onClick={() => updateSettingsMutation.mutate({ theme: "dark" })}
                 data-testid="button-theme-dark"
               >
                 <Moon className="h-4 w-4 mr-2" />
@@ -323,7 +345,7 @@ export default function Settings() {
               <Button
                 variant={theme === "system" ? "secondary" : "ghost"}
                 size="sm"
-                onClick={() => setTheme("system")}
+                onClick={() => updateSettingsMutation.mutate({ theme: "system" })}
                 data-testid="button-theme-system"
               >
                 <Monitor className="h-4 w-4 mr-2" />
@@ -342,8 +364,8 @@ export default function Settings() {
               </p>
             </div>
             <Switch
-              checked={showQuotes}
-              onCheckedChange={setShowQuotes}
+              checked={userSettings?.showQuotes ?? true}
+              onCheckedChange={(checked) => updateSettingsMutation.mutate({ showQuotes: checked })}
               data-testid="switch-show-quotes"
             />
           </div>
@@ -369,10 +391,46 @@ export default function Settings() {
               </p>
             </div>
             <Switch
-              checked={notificationsEnabled}
-              onCheckedChange={setNotificationsEnabled}
+              checked={userSettings?.notificationsEnabled ?? true}
+              onCheckedChange={(checked) => updateSettingsMutation.mutate({ notificationsEnabled: checked })}
               data-testid="switch-notifications"
             />
+          </div>
+
+          <Separator className="my-4" />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium">Test Notifications</p>
+              <p className="text-sm text-muted-foreground">
+                Send a test notification to check if they are working
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (Notification.permission === 'granted') {
+                  new Notification('Test Notification', {
+                    body: 'This is how your notifications will look! 🍯',
+                    icon: '/favicon.png'
+                  });
+                } else if (Notification.permission !== 'denied') {
+                  Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                      new Notification('Test Notification', {
+                        body: 'This is how your notifications will look! 🍯',
+                        icon: '/favicon.png'
+                      });
+                    }
+                  });
+                } else {
+                  toast({ title: "Notifications blocked", description: "Please enable notifications in your browser settings", variant: "destructive" });
+                }
+              }}
+            >
+              Send Test
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -395,7 +453,10 @@ export default function Settings() {
                 Choose the first day of the week
               </p>
             </div>
-            <Select value={weekStartsOn} onValueChange={setWeekStartsOn}>
+            <Select
+              value={userSettings?.weekStartsOn?.toString() ?? "1"}
+              onValueChange={(val) => updateSettingsMutation.mutate({ weekStartsOn: parseInt(val) })}
+            >
               <SelectTrigger className="w-[140px]" data-testid="select-week-start">
                 <SelectValue />
               </SelectTrigger>
@@ -432,8 +493,8 @@ export default function Settings() {
                   {editingWorkspace ? "Edit Workspace" : "Create Workspace"}
                 </DialogTitle>
                 <DialogDescription>
-                  {editingWorkspace 
-                    ? "Update your workspace settings" 
+                  {editingWorkspace
+                    ? "Update your workspace settings"
                     : "Create a new workspace to organize your life"
                   }
                 </DialogDescription>

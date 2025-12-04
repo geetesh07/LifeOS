@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CardSkeleton } from "@/components/LoadingSkeleton";
 import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
@@ -23,9 +24,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { 
-  ChevronLeft, 
-  ChevronRight, 
+import {
+  ChevronLeft,
+  ChevronRight,
   Plus,
   Clock,
   MapPin,
@@ -35,14 +36,14 @@ import {
 import { useWorkspace } from "@/lib/workspace-context";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { 
-  format, 
-  startOfMonth, 
-  endOfMonth, 
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
   startOfWeek,
   endOfWeek,
-  eachDayOfInterval, 
-  isSameMonth, 
+  eachDayOfInterval,
+  isSameMonth,
   isSameDay,
   isToday,
   addMonths,
@@ -71,13 +72,13 @@ interface CalendarEvent {
   type: "event" | "task";
 }
 
-function EventForm({ 
-  event, 
-  workspaceId, 
+function EventForm({
+  event,
+  workspaceId,
   onClose,
   selectedDate,
-}: { 
-  event?: Event; 
+}: {
+  event?: Event;
   workspaceId: string;
   onClose: () => void;
   selectedDate?: Date;
@@ -89,9 +90,9 @@ function EventForm({
   const [color, setColor] = useState(event?.color || "#3B82F6");
   const [isAllDay, setIsAllDay] = useState(event?.isAllDay || false);
   const [startDate, setStartDate] = useState(
-    event?.startTime 
-      ? format(new Date(event.startTime), "yyyy-MM-dd") 
-      : selectedDate 
+    event?.startTime
+      ? format(new Date(event.startTime), "yyyy-MM-dd")
+      : selectedDate
         ? format(selectedDate, "yyyy-MM-dd")
         : format(new Date(), "yyyy-MM-dd")
   );
@@ -99,9 +100,9 @@ function EventForm({
     event?.startTime ? format(new Date(event.startTime), "HH:mm") : "09:00"
   );
   const [endDate, setEndDate] = useState(
-    event?.endTime 
-      ? format(new Date(event.endTime), "yyyy-MM-dd") 
-      : selectedDate 
+    event?.endTime
+      ? format(new Date(event.endTime), "yyyy-MM-dd")
+      : selectedDate
         ? format(selectedDate, "yyyy-MM-dd")
         : format(new Date(), "yyyy-MM-dd")
   );
@@ -114,7 +115,7 @@ function EventForm({
       return apiRequest("POST", "/api/events", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/events?workspaceId=${workspaceId}`] });
       toast({ title: "Event created successfully" });
       onClose();
     },
@@ -128,7 +129,7 @@ function EventForm({
       return apiRequest("PATCH", `/api/events/${event?.id}`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/events?workspaceId=${workspaceId}`] });
       toast({ title: "Event updated successfully" });
       onClose();
     },
@@ -139,12 +140,12 @@ function EventForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const startDateTime = isAllDay 
+
+    const startDateTime = isAllDay
       ? new Date(`${startDate}T00:00:00`)
       : new Date(`${startDate}T${startTime}`);
-    
-    const endDateTime = isAllDay 
+
+    const endDateTime = isAllDay
       ? new Date(`${endDate}T23:59:59`)
       : new Date(`${endDate}T${endTime}`);
 
@@ -268,9 +269,8 @@ function EventForm({
             <button
               key={option.value}
               type="button"
-              className={`w-8 h-8 rounded-full transition-all ${
-                color === option.value ? "ring-2 ring-offset-2 ring-primary" : ""
-              }`}
+              className={`w-8 h-8 rounded-full transition-all ${color === option.value ? "ring-2 ring-offset-2 ring-primary" : ""
+                }`}
               style={{ backgroundColor: option.value }}
               onClick={() => setColor(option.value)}
               data-testid={`color-${option.label.toLowerCase()}`}
@@ -291,10 +291,10 @@ function EventForm({
   );
 }
 
-function DayCell({ 
-  date, 
-  events, 
-  currentMonth, 
+function DayCell({
+  date,
+  events,
+  currentMonth,
   onDayClick,
   onEventClick,
 }: {
@@ -309,16 +309,14 @@ function DayCell({
   const today = isToday(date);
 
   return (
-    <div 
-      className={`min-h-[100px] p-2 border-b border-r cursor-pointer hover-elevate transition-colors ${
-        !isCurrentMonth ? "bg-muted/30 text-muted-foreground" : ""
-      } ${today ? "bg-primary/5" : ""}`}
+    <div
+      className={`min-h-[100px] p-2 border-b border-r cursor-pointer hover-elevate transition-colors ${!isCurrentMonth ? "bg-muted/30 text-muted-foreground" : ""
+        } ${today ? "bg-primary/5" : ""}`}
       onClick={() => onDayClick(date)}
       data-testid={`calendar-day-${format(date, "yyyy-MM-dd")}`}
     >
-      <div className={`text-sm font-medium mb-1 ${
-        today ? "w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center" : ""
-      }`}>
+      <div className={`text-sm font-medium mb-1 ${today ? "w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center" : ""
+        }`}>
         {format(date, "d")}
       </div>
       <div className="space-y-1">
@@ -326,7 +324,7 @@ function DayCell({
           <div
             key={event.id}
             className="text-xs p-1 rounded truncate cursor-pointer"
-            style={{ 
+            style={{
               backgroundColor: event.color + "20",
               color: event.color,
               borderLeft: `2px solid ${event.color}`,
@@ -361,7 +359,7 @@ export default function Calendar() {
   const [editingEvent, setEditingEvent] = useState<Event | undefined>();
 
   const { data: events, isLoading: eventsLoading } = useQuery<Event[]>({
-    queryKey: ["/api/events", currentWorkspace?.id],
+    queryKey: [`/api/events?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
@@ -466,8 +464,8 @@ export default function Calendar() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             size="sm"
             onClick={() => syncMutation.mutate()}
             disabled={syncMutation.isPending}
@@ -505,8 +503,8 @@ export default function Calendar() {
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="icon"
                 onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
                 data-testid="button-prev-month"
@@ -516,8 +514,8 @@ export default function Calendar() {
               <h2 className="text-xl font-semibold" data-testid="text-current-month">
                 {format(currentMonth, "MMMM yyyy")}
               </h2>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="icon"
                 onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
                 data-testid="button-next-month"
@@ -525,8 +523,8 @@ export default function Calendar() {
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               size="sm"
               onClick={() => setCurrentMonth(new Date())}
               data-testid="button-today"
@@ -537,7 +535,7 @@ export default function Calendar() {
         </CardHeader>
         <CardContent className="p-0">
           {eventsLoading ? (
-            <Skeleton className="h-[600px] w-full" />
+            <CardSkeleton count={1} className="h-[600px] grid-cols-1" />
           ) : (
             <>
               <div className="grid grid-cols-7 border-b">

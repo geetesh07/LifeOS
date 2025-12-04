@@ -1,14 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
+import { ActivityGraph } from "@/components/activity-graph";
+
+// ... (existing imports)
+
+// Inside Dashboard component return:
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { 
-  CheckSquare, 
-  Clock, 
-  Target, 
-  ArrowRight, 
+import {
+  CheckSquare,
+  Clock,
+  Target,
+  ArrowRight,
   Flame,
   Calendar,
   TrendingUp,
@@ -21,6 +25,7 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { getDailyQuote } from "@/lib/quotes";
 import { format, isToday, isTomorrow, parseISO, startOfDay } from "date-fns";
 import type { Task, Habit, TimeEntry, Event } from "@shared/schema";
+import { useQuery } from "@tanstack/react-query"; // Assuming this import was missing and needed for useQuery
 
 function QuoteCard() {
   const quote = getDailyQuote();
@@ -44,24 +49,24 @@ function QuoteCard() {
   );
 }
 
-function StatsCards({ 
-  tasks, 
-  habits, 
-  timeEntries 
-}: { 
-  tasks: Task[] | undefined; 
+function StatsCards({
+  tasks,
+  habits,
+  timeEntries
+}: {
+  tasks: Task[] | undefined;
   habits: Habit[] | undefined;
   timeEntries: TimeEntry[] | undefined;
 }) {
-  const todayTasks = tasks?.filter(t => 
+  const todayTasks = tasks?.filter(t =>
     t.dueDate && isToday(new Date(t.dueDate)) && t.status !== "done"
   ).length || 0;
 
-  const completedToday = tasks?.filter(t => 
+  const completedToday = tasks?.filter(t =>
     t.completedAt && isToday(new Date(t.completedAt))
   ).length || 0;
 
-  const todayMinutes = timeEntries?.filter(e => 
+  const todayMinutes = timeEntries?.filter(e =>
     isToday(new Date(e.startTime))
   ).reduce((acc, e) => acc + (e.durationMinutes || 0), 0) || 0;
 
@@ -160,8 +165,8 @@ function UpcomingTasks({ tasks }: { tasks: Task[] | undefined }) {
           </div>
         ) : (
           upcomingTasks.map((task) => (
-            <div 
-              key={task.id} 
+            <div
+              key={task.id}
               className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover-elevate transition-all cursor-pointer"
               data-testid={`task-item-${task.id}`}
             >
@@ -207,7 +212,7 @@ function HabitProgress({ habits }: { habits: Habit[] | undefined }) {
             <div key={habit.id} className="space-y-2" data-testid={`habit-item-${habit.id}`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div 
+                  <div
                     className="w-6 h-6 rounded flex items-center justify-center"
                     style={{ backgroundColor: habit.color + "20" }}
                   >
@@ -288,8 +293,8 @@ function RecentTimeEntries({ timeEntries }: { timeEntries: TimeEntry[] | undefin
           </div>
         ) : (
           recentEntries.map((entry) => (
-            <div 
-              key={entry.id} 
+            <div
+              key={entry.id}
               className="flex items-center justify-between p-3 rounded-lg bg-muted/30"
               data-testid={`time-entry-${entry.id}`}
             >
@@ -300,7 +305,7 @@ function RecentTimeEntries({ timeEntries }: { timeEntries: TimeEntry[] | undefin
                 </p>
               </div>
               <span className="font-mono text-sm font-medium">
-                {entry.durationMinutes 
+                {entry.durationMinutes
                   ? `${Math.floor(entry.durationMinutes / 60)}h ${entry.durationMinutes % 60}m`
                   : "In progress"
                 }
@@ -353,10 +358,10 @@ export default function Dashboard() {
           </p>
         </div>
         {currentWorkspace && (
-          <Badge 
-            variant="outline" 
+          <Badge
+            variant="outline"
             className="self-start md:self-auto px-3 py-1.5"
-            style={{ 
+            style={{
               borderColor: currentWorkspace.color,
               backgroundColor: currentWorkspace.color + "10",
               color: currentWorkspace.color,
@@ -394,6 +399,8 @@ export default function Dashboard() {
         <QuickActions workspaceId={currentWorkspace?.id} />
         <RecentTimeEntries timeEntries={timeEntries} />
       </div>
+
+      <ActivityGraph />
     </div>
   );
 }

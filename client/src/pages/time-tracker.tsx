@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ListSkeleton } from "@/components/LoadingSkeleton";
 import {
   Select,
   SelectContent,
@@ -20,10 +21,10 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { 
-  Play, 
-  Pause, 
-  Square, 
+import {
+  Play,
+  Pause,
+  Square,
   Clock,
   MoreHorizontal,
   Trash2,
@@ -57,7 +58,7 @@ function formatDurationLong(minutes: number): string {
   return `${hours}h ${mins}m`;
 }
 
-function Timer({ 
+function Timer({
   workspaceId,
   projects,
   tasks,
@@ -107,7 +108,7 @@ function Timer({
       return apiRequest("POST", "/api/time-entries", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/time-entries?workspaceId=${workspaceId}`] });
       toast({ title: "Timer started" });
     },
     onError: () => {
@@ -129,7 +130,7 @@ function Timer({
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/time-entries?workspaceId=${workspaceId}`] });
       toast({ title: "Time entry saved" });
       setDescription("");
       setProjectId("");
@@ -155,7 +156,7 @@ function Timer({
   const minutes = Math.floor((elapsedSeconds % 3600) / 60);
   const seconds = elapsedSeconds % 60;
 
-  const filteredTasks = projectId 
+  const filteredTasks = projectId
     ? tasks.filter(t => t.projectId === projectId)
     : tasks;
 
@@ -164,7 +165,7 @@ function Timer({
       <CardContent className="pt-6">
         <div className="flex flex-col lg:flex-row items-center gap-6">
           <div className="flex-shrink-0 text-center">
-            <div 
+            <div
               className="font-mono text-5xl lg:text-6xl font-bold tracking-wider"
               data-testid="timer-display"
             >
@@ -190,16 +191,20 @@ function Timer({
             />
 
             <div className="grid grid-cols-2 gap-4">
-              <Select value={projectId} onValueChange={setProjectId} disabled={!!activeEntry}>
+              <Select
+                value={projectId || "_none"}
+                onValueChange={(val) => setProjectId(val === "_none" ? "" : val)}
+                disabled={!!activeEntry}
+              >
                 <SelectTrigger data-testid="select-timer-project">
                   <SelectValue placeholder="Select project" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No project</SelectItem>
+                  <SelectItem value="_none">No project</SelectItem>
                   {projects.map((project) => (
                     <SelectItem key={project.id} value={project.id}>
                       <div className="flex items-center gap-2">
-                        <div 
+                        <div
                           className="w-2 h-2 rounded-full"
                           style={{ backgroundColor: project.color }}
                         />
@@ -210,12 +215,16 @@ function Timer({
                 </SelectContent>
               </Select>
 
-              <Select value={taskId} onValueChange={setTaskId} disabled={!!activeEntry}>
+              <Select
+                value={taskId || "_none"}
+                onValueChange={(val) => setTaskId(val === "_none" ? "" : val)}
+                disabled={!!activeEntry}
+              >
                 <SelectTrigger data-testid="select-timer-task">
                   <SelectValue placeholder="Select task" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No task</SelectItem>
+                  <SelectItem value="_none">No task</SelectItem>
                   {filteredTasks.map((task) => (
                     <SelectItem key={task.id} value={task.id}>
                       {task.title}
@@ -228,8 +237,8 @@ function Timer({
 
           <div className="flex-shrink-0">
             {activeEntry ? (
-              <Button 
-                size="lg" 
+              <Button
+                size="lg"
                 variant="destructive"
                 className="w-16 h-16 rounded-full"
                 onClick={() => stopMutation.mutate()}
@@ -239,7 +248,7 @@ function Timer({
                 <Square className="h-6 w-6" />
               </Button>
             ) : (
-              <Button 
+              <Button
                 size="lg"
                 className="w-16 h-16 rounded-full"
                 onClick={handleStart}
@@ -262,7 +271,7 @@ function WeeklyStats({ timeEntries }: { timeEntries: TimeEntry[] }) {
   const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
   const dailyTotals = weekDays.map(day => {
-    const dayEntries = timeEntries.filter(e => 
+    const dayEntries = timeEntries.filter(e =>
       e.durationMinutes && isSameDay(new Date(e.startTime), day)
     );
     return {
@@ -283,11 +292,10 @@ function WeeklyStats({ timeEntries }: { timeEntries: TimeEntry[] }) {
         <div className="flex items-end justify-between gap-2 h-32 mb-4">
           {dailyTotals.map(({ day, minutes }) => (
             <div key={day.toISOString()} className="flex-1 flex flex-col items-center gap-2">
-              <div 
-                className={`w-full rounded-t transition-all ${
-                  isToday(day) ? "bg-primary" : "bg-primary/30"
-                }`}
-                style={{ 
+              <div
+                className={`w-full rounded-t transition-all ${isToday(day) ? "bg-primary" : "bg-primary/30"
+                  }`}
+                style={{
                   height: `${Math.max((minutes / maxMinutes) * 100, 4)}%`,
                   minHeight: minutes > 0 ? "8px" : "4px",
                 }}
@@ -310,12 +318,12 @@ function WeeklyStats({ timeEntries }: { timeEntries: TimeEntry[] }) {
   );
 }
 
-function TimeEntryItem({ 
-  entry, 
+function TimeEntryItem({
+  entry,
   projects,
   onEdit,
   onDelete,
-}: { 
+}: {
   entry: TimeEntry;
   projects: Project[];
   onEdit: (entry: TimeEntry) => void;
@@ -324,7 +332,7 @@ function TimeEntryItem({
   const project = projects.find(p => p.id === entry.projectId);
 
   return (
-    <div 
+    <div
       className="group flex items-center justify-between p-4 rounded-lg bg-muted/30 hover-elevate transition-all"
       data-testid={`time-entry-${entry.id}`}
     >
@@ -336,10 +344,10 @@ function TimeEntryItem({
           <p className="font-medium">{entry.description || "Untitled entry"}</p>
           <div className="flex items-center gap-2 mt-1">
             {project && (
-              <Badge 
-                variant="outline" 
+              <Badge
+                variant="outline"
                 className="text-xs"
-                style={{ 
+                style={{
                   borderColor: project.color,
                   color: project.color,
                 }}
@@ -357,15 +365,15 @@ function TimeEntryItem({
 
       <div className="flex items-center gap-3">
         <span className="font-mono font-medium">
-          {entry.durationMinutes 
+          {entry.durationMinutes
             ? formatDurationLong(entry.durationMinutes)
             : "In progress"
           }
         </span>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               size="icon"
               className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
             >
@@ -378,7 +386,7 @@ function TimeEntryItem({
               Edit
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={() => onDelete(entry.id)}
               className="text-destructive"
             >
@@ -393,6 +401,7 @@ function TimeEntryItem({
 }
 
 export default function TimeTracker() {
+  console.log("TimeTracker component mounting");
   const { currentWorkspace } = useWorkspace();
   const { toast } = useToast();
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
@@ -401,18 +410,18 @@ export default function TimeTracker() {
   const [editDuration, setEditDuration] = useState("");
 
   const { data: timeEntries, isLoading: entriesLoading } = useQuery<TimeEntry[]>({
-    queryKey: ["/api/time-entries", currentWorkspace?.id],
+    queryKey: [`/api/time-entries?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
     refetchInterval: 10000,
   });
 
   const { data: projects } = useQuery<Project[]>({
-    queryKey: ["/api/projects", currentWorkspace?.id],
+    queryKey: [`/api/projects?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
   const { data: tasks } = useQuery<Task[]>({
-    queryKey: ["/api/tasks", currentWorkspace?.id],
+    queryKey: [`/api/tasks?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
@@ -430,7 +439,7 @@ export default function TimeTracker() {
       return apiRequest("PATCH", `/api/time-entries/${id}`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/time-entries?workspaceId=${currentWorkspace?.id}`] });
       toast({ title: "Time entry updated" });
       setIsEditDialogOpen(false);
       setEditingEntry(null);
@@ -442,7 +451,7 @@ export default function TimeTracker() {
       return apiRequest("DELETE", `/api/time-entries/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/time-entries?workspaceId=${currentWorkspace?.id}`], });
       toast({ title: "Time entry deleted" });
     },
   });
@@ -488,7 +497,7 @@ export default function TimeTracker() {
         projects={projects || []}
         tasks={tasks || []}
         activeEntry={activeEntry}
-        onStop={() => {}}
+        onStop={() => { }}
       />
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -502,11 +511,7 @@ export default function TimeTracker() {
             </CardHeader>
             <CardContent className="space-y-3">
               {entriesLoading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-20 w-full" />
-                  ))}
-                </div>
+                <ListSkeleton count={3} />
               ) : todayEntries && todayEntries.length > 0 ? (
                 todayEntries.map((entry) => (
                   <TimeEntryItem

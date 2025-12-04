@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CardSkeleton } from "@/components/LoadingSkeleton";
 import {
   Dialog,
   DialogContent,
@@ -30,8 +31,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { 
-  Plus, 
+import {
+  Plus,
   Flame,
   Target,
   Check,
@@ -86,7 +87,7 @@ function HabitForm({
       return apiRequest("POST", "/api/habits", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/habits?workspaceId=${workspaceId}`] });
       toast({ title: "Habit created successfully" });
       onClose();
     },
@@ -100,7 +101,7 @@ function HabitForm({
       return apiRequest("PATCH", `/api/habits/${habit?.id}`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/habits?workspaceId=${workspaceId}`] });
       toast({ title: "Habit updated successfully" });
       onClose();
     },
@@ -187,9 +188,8 @@ function HabitForm({
             <button
               key={option.value}
               type="button"
-              className={`w-8 h-8 rounded-full transition-all ${
-                color === option.value ? "ring-2 ring-offset-2 ring-primary" : ""
-              }`}
+              className={`w-8 h-8 rounded-full transition-all ${color === option.value ? "ring-2 ring-offset-2 ring-primary" : ""
+                }`}
               style={{ backgroundColor: option.value }}
               onClick={() => setColor(option.value)}
               data-testid={`color-${option.label.toLowerCase()}`}
@@ -225,8 +225,8 @@ function HabitCard({
 }) {
   const today = startOfDay(new Date());
   const last7Days = Array.from({ length: 7 }, (_, i) => subDays(today, 6 - i));
-  
-  const isCompletedToday = completions.some(c => 
+
+  const isCompletedToday = completions.some(c =>
     isSameDay(new Date(c.date), today)
   );
 
@@ -248,7 +248,7 @@ function HabitCard({
       <CardContent className="pt-6">
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div 
+            <div
               className="w-12 h-12 rounded-xl flex items-center justify-center"
               style={{ backgroundColor: habit.color + "20" }}
             >
@@ -264,8 +264,8 @@ function HabitCard({
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 size="icon"
                 className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
               >
@@ -278,7 +278,7 @@ function HabitCard({
                 Edit
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={() => onDelete(habit.id)}
                 className="text-destructive"
               >
@@ -303,13 +303,12 @@ function HabitCard({
 
         <div className="flex items-center justify-between gap-2 mb-4">
           {completionDays.map(({ date, completed }) => (
-            <div 
+            <div
               key={date.toISOString()}
-              className={`w-8 h-8 rounded-md flex items-center justify-center text-xs font-medium transition-all ${
-                completed 
-                  ? "text-white" 
-                  : "bg-muted text-muted-foreground"
-              }`}
+              className={`w-8 h-8 rounded-md flex items-center justify-center text-xs font-medium transition-all ${completed
+                ? "text-white"
+                : "bg-muted text-muted-foreground"
+                }`}
               style={completed ? { backgroundColor: habit.color } : undefined}
             >
               {format(date, "d")}
@@ -351,7 +350,7 @@ function HabitCard({
 
 function OverallStats({ habits, completions }: { habits: Habit[]; completions: HabitCompletion[] }) {
   const today = startOfDay(new Date());
-  const completedToday = habits.filter(h => 
+  const completedToday = habits.filter(h =>
     completions.some(c => c.habitId === h.id && isSameDay(new Date(c.date), today))
   ).length;
 
@@ -394,12 +393,12 @@ export default function Habits() {
   const [editingHabit, setEditingHabit] = useState<Habit | undefined>();
 
   const { data: habits, isLoading: habitsLoading } = useQuery<Habit[]>({
-    queryKey: ["/api/habits", currentWorkspace?.id],
+    queryKey: [`/api/habits?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
   const { data: completions } = useQuery<HabitCompletion[]>({
-    queryKey: ["/api/habit-completions", currentWorkspace?.id],
+    queryKey: [`/api/habit-completions?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
@@ -412,8 +411,8 @@ export default function Habits() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/habit-completions"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/habits?workspaceId=${currentWorkspace?.id}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/habit-completions?workspaceId=${currentWorkspace?.id}`] });
       toast({ title: "Habit completed!" });
     },
     onError: () => {
@@ -426,7 +425,7 @@ export default function Habits() {
       return apiRequest("DELETE", `/api/habits/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/habits?workspaceId=${currentWorkspace?.id}`] });
       toast({ title: "Habit deleted" });
     },
   });
@@ -487,19 +486,7 @@ export default function Habits() {
       <OverallStats habits={activeHabits} completions={habitCompletions} />
 
       {habitsLoading ? (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[1, 2, 3].map((i) => (
-            <Card key={i}>
-              <CardContent className="pt-6">
-                <Skeleton className="h-12 w-12 rounded-xl mb-4" />
-                <Skeleton className="h-6 w-32 mb-2" />
-                <Skeleton className="h-4 w-48 mb-4" />
-                <Skeleton className="h-8 w-full mb-4" />
-                <Skeleton className="h-10 w-full" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <CardSkeleton count={6} />
       ) : activeHabits.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">

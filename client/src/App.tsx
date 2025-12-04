@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -9,6 +9,7 @@ import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/lib/auth-context";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +37,12 @@ import Projects from "@/pages/projects";
 import Clients from "@/pages/clients";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
+import LoginPage from "@/pages/login";
+import SignupPage from "@/pages/signup";
+import { AuthProvider } from "@/lib/auth-context";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { InstallPrompt } from "@/components/InstallPrompt";
+import { registerServiceWorker, setupInstallPrompt, requestNotificationPermission } from "@/lib/pwa";
 
 const iconOptions = [
   { value: "briefcase", label: "Briefcase", icon: Briefcase },
@@ -54,11 +61,11 @@ const colorOptions = [
   { value: "#EC4899", label: "Pink" },
 ];
 
-function WorkspaceModal({ 
-  open, 
-  onClose 
-}: { 
-  open: boolean; 
+function WorkspaceModal({
+  open,
+  onClose
+}: {
+  open: boolean;
   onClose: () => void;
 }) {
   const { toast } = useToast();
@@ -69,7 +76,7 @@ function WorkspaceModal({
 
   const handleCreate = async () => {
     if (!name.trim()) return;
-    
+
     setIsCreating(true);
     try {
       await apiRequest("POST", "/api/workspaces", { name, color, icon });
@@ -115,11 +122,10 @@ function WorkspaceModal({
                   <button
                     key={option.value}
                     type="button"
-                    className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
-                      icon === option.value 
-                        ? "bg-primary text-primary-foreground" 
-                        : "bg-muted hover:bg-muted/80"
-                    }`}
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${icon === option.value
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted hover:bg-muted/80"
+                      }`}
                     onClick={() => setIcon(option.value)}
                   >
                     <Icon className="h-5 w-5" />
@@ -136,9 +142,8 @@ function WorkspaceModal({
                 <button
                   key={option.value}
                   type="button"
-                  className={`w-8 h-8 rounded-full transition-all ${
-                    color === option.value ? "ring-2 ring-offset-2 ring-primary" : ""
-                  }`}
+                  className={`w-8 h-8 rounded-full transition-all ${color === option.value ? "ring-2 ring-offset-2 ring-primary" : ""
+                    }`}
                   style={{ backgroundColor: option.value }}
                   onClick={() => setColor(option.value)}
                 />
@@ -150,8 +155,8 @@ function WorkspaceModal({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button 
-            onClick={handleCreate} 
+          <Button
+            onClick={handleCreate}
             disabled={isCreating || !name.trim()}
             data-testid="button-create-workspace"
           >
@@ -166,24 +171,72 @@ function WorkspaceModal({
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/tasks" component={Tasks} />
-      <Route path="/calendar" component={Calendar} />
-      <Route path="/time" component={TimeTracker} />
-      <Route path="/habits" component={Habits} />
-      <Route path="/diary" component={Diary} />
-      <Route path="/notes" component={Notes} />
-      <Route path="/reports" component={Reports} />
-      <Route path="/projects" component={Projects} />
-      <Route path="/clients" component={Clients} />
-      <Route path="/settings" component={Settings} />
+      <Route path="/login" component={LoginPage} />
+      <Route path="/signup" component={SignupPage} />
+      <Route path="/">
+        <ProtectedRoute>
+          <Dashboard />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/tasks">
+        <ProtectedRoute>
+          <Tasks />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/calendar">
+        <ProtectedRoute>
+          <Calendar />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/time">
+        <ProtectedRoute>
+          <TimeTracker />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/habits">
+        <ProtectedRoute>
+          <Habits />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/diary">
+        <ProtectedRoute>
+          <Diary />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/notes">
+        <ProtectedRoute>
+          <Notes />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/reports">
+        <ProtectedRoute>
+          <Reports />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/projects">
+        <ProtectedRoute>
+          <Projects />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/clients">
+        <ProtectedRoute>
+          <Clients />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/settings">
+        <ProtectedRoute>
+          <Settings />
+        </ProtectedRoute>
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );
 }
 
 function AppContent() {
-  const { setWorkspaces, currentWorkspace } = useWorkspace();
+  const { user, loading } = useAuth();
+  const [location] = useLocation();
+  const { setWorkspaces } = useWorkspace();
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
 
   const { data: workspaces } = useQuery<Workspace[]>({
@@ -201,6 +254,26 @@ function AppContent() {
     "--sidebar-width-icon": "4rem",
   };
 
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login/signup pages without sidebar
+  const isAuthPage = location === '/login' || location === '/signup';
+
+  if (!user || isAuthPage) {
+    return <Router />;
+  }
+
+  // Show authenticated layout with sidebar
   return (
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex h-screen w-full">
@@ -215,25 +288,42 @@ function AppContent() {
           </main>
         </SidebarInset>
       </div>
-      <WorkspaceModal 
-        open={isWorkspaceModalOpen} 
-        onClose={() => setIsWorkspaceModalOpen(false)} 
+      <WorkspaceModal
+        open={isWorkspaceModalOpen}
+        onClose={() => setIsWorkspaceModalOpen(false)}
       />
     </SidebarProvider>
   );
 }
 
 function App() {
+  // Initialize PWA on mount
+  useEffect(() => {
+    // Register service worker
+    registerServiceWorker();
+
+    // Setup install prompt
+    setupInstallPrompt();
+
+    // Request notification permission after a short delay (better UX)
+    setTimeout(() => {
+      requestNotificationPermission();
+    }, 3000);
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="dark">
-        <WorkspaceProvider>
-          <TooltipProvider>
-            <AppContent />
-            <Toaster />
-          </TooltipProvider>
-        </WorkspaceProvider>
-      </ThemeProvider>
+      <AuthProvider>
+        <ThemeProvider defaultTheme="dark">
+          <WorkspaceProvider>
+            <TooltipProvider>
+              <AppContent />
+              <Toaster />
+              <InstallPrompt />
+            </TooltipProvider>
+          </WorkspaceProvider>
+        </ThemeProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

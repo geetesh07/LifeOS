@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  ChevronLeft, 
+import { ListSkeleton } from "@/components/LoadingSkeleton";
+import {
+  ChevronLeft,
   ChevronRight,
   Save,
   BookOpen,
@@ -32,11 +33,11 @@ const moodOptions = [
   { value: "terrible", label: "Terrible", icon: Frown, color: "text-red-500" },
 ];
 
-function MoodSelector({ 
-  value, 
-  onChange 
-}: { 
-  value: string | null; 
+function MoodSelector({
+  value,
+  onChange
+}: {
+  value: string | null;
   onChange: (mood: string) => void;
 }) {
   return (
@@ -97,7 +98,7 @@ function DiaryEditor({
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/diary-entries"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/diary-entries?workspaceId=${workspaceId}`] });
       toast({ title: "Entry saved" });
       setHasChanges(false);
     },
@@ -108,7 +109,7 @@ function DiaryEditor({
 
   const handleSave = () => {
     if (!workspaceId) return;
-    
+
     const data = {
       workspaceId,
       date: startOfDay(date),
@@ -139,8 +140,8 @@ function DiaryEditor({
               Unsaved changes
             </Badge>
           )}
-          <Button 
-            onClick={handleSave} 
+          <Button
+            onClick={handleSave}
             disabled={saveMutation.isPending || !hasChanges}
             data-testid="button-save-diary"
           >
@@ -204,14 +205,13 @@ function DiaryHistory({
           recentEntries.map((entry) => {
             const MoodIcon = getMoodIcon(entry.mood);
             const isSelected = isSameDay(new Date(entry.date), currentDate);
-            
+
             return (
               <button
                 key={entry.id}
                 onClick={() => onSelectDate(new Date(entry.date))}
-                className={`w-full text-left p-3 rounded-lg transition-all hover-elevate ${
-                  isSelected ? "bg-primary/10" : "bg-muted/30"
-                }`}
+                className={`w-full text-left p-3 rounded-lg transition-all hover-elevate ${isSelected ? "bg-primary/10" : "bg-muted/30"
+                  }`}
                 data-testid={`diary-entry-${entry.id}`}
               >
                 <div className="flex items-center justify-between mb-1">
@@ -246,7 +246,7 @@ function DiaryStats({ entries }: { entries: DiaryEntry[] }) {
     return acc;
   }, {} as Record<string, number>);
 
-  const totalWords = entries.reduce((acc, e) => 
+  const totalWords = entries.reduce((acc, e) =>
     acc + e.content.split(/\s+/).filter(Boolean).length, 0
   );
 
@@ -270,16 +270,16 @@ function DiaryStats({ entries }: { entries: DiaryEntry[] }) {
             {moodOptions.map((mood) => {
               const count = moodCounts[mood.value] || 0;
               const percentage = thisMonth.length > 0 ? (count / thisMonth.length) * 100 : 0;
-              
+
               return (
                 <div key={mood.value} className="flex items-center gap-2">
                   <mood.icon className={`h-4 w-4 ${mood.color}`} />
                   <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className="h-full rounded-full transition-all"
-                      style={{ 
+                      style={{
                         width: `${percentage}%`,
-                        backgroundColor: mood.color.replace("text-", "").includes("-500") 
+                        backgroundColor: mood.color.replace("text-", "").includes("-500")
                           ? `var(--${mood.color.replace("text-", "").replace("-500", "")})`
                           : undefined,
                       }}
@@ -301,11 +301,11 @@ export default function Diary() {
   const [currentDate, setCurrentDate] = useState(startOfDay(new Date()));
 
   const { data: entries, isLoading } = useQuery<DiaryEntry[]>({
-    queryKey: ["/api/diary-entries", currentWorkspace?.id],
+    queryKey: [`/api/diary-entries?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
-  const currentEntry = entries?.find(e => 
+  const currentEntry = entries?.find(e =>
     isSameDay(new Date(e.date), currentDate)
   );
 
@@ -376,10 +376,7 @@ export default function Diary() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="space-y-4">
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-[400px] w-full" />
-                </div>
+                <ListSkeleton count={1} className="h-[400px]" />
               ) : (
                 <DiaryEditor
                   date={currentDate}

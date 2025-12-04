@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CardSkeleton } from "@/components/LoadingSkeleton";
 import {
   Dialog,
   DialogContent,
@@ -30,8 +31,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { 
-  Plus, 
+import {
+  Plus,
   Folder,
   MoreHorizontal,
   Edit,
@@ -100,7 +101,7 @@ function ProjectForm({
       return apiRequest("POST", "/api/projects", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/projects?workspaceId=${workspaceId}`] });
       toast({ title: "Project created successfully" });
       onClose();
     },
@@ -114,7 +115,7 @@ function ProjectForm({
       return apiRequest("PATCH", `/api/projects/${project?.id}`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/projects?workspaceId=${workspaceId}`] });
       toast({ title: "Project updated successfully" });
       onClose();
     },
@@ -253,9 +254,8 @@ function ProjectForm({
             <button
               key={option.value}
               type="button"
-              className={`w-8 h-8 rounded-full transition-all ${
-                color === option.value ? "ring-2 ring-offset-2 ring-primary" : ""
-              }`}
+              className={`w-8 h-8 rounded-full transition-all ${color === option.value ? "ring-2 ring-offset-2 ring-primary" : ""
+                }`}
               style={{ backgroundColor: option.value }}
               onClick={() => setColor(option.value)}
             />
@@ -308,7 +308,7 @@ function ProjectCard({
       <CardContent className="pt-6">
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div 
+            <div
               className="w-10 h-10 rounded-lg flex items-center justify-center"
               style={{ backgroundColor: project.color + "20" }}
             >
@@ -324,8 +324,8 @@ function ProjectCard({
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 size="icon"
                 className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
               >
@@ -338,7 +338,7 @@ function ProjectCard({
                 Edit
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={() => onDelete(project.id)}
                 className="text-destructive"
               >
@@ -383,7 +383,7 @@ function ProjectCard({
         </div>
 
         <div className="mt-4 pt-4 border-t flex items-center justify-between">
-          <Badge 
+          <Badge
             variant="outline"
             className="gap-1"
           >
@@ -405,7 +405,7 @@ export default function Projects() {
   const [editingProject, setEditingProject] = useState<Project | undefined>();
 
   const { data: projects, isLoading } = useQuery<Project[]>({
-    queryKey: ["/api/projects", currentWorkspace?.id],
+    queryKey: [`/api/projects?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
@@ -429,7 +429,7 @@ export default function Projects() {
       return apiRequest("DELETE", `/api/projects/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/projects?workspaceId=${currentWorkspace?.id}`] });
       toast({ title: "Project deleted" });
     },
   });
@@ -522,19 +522,7 @@ export default function Projects() {
       </div>
 
       {isLoading ? (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[1, 2, 3].map((i) => (
-            <Card key={i}>
-              <CardContent className="pt-6">
-                <Skeleton className="h-10 w-10 rounded-lg mb-4" />
-                <Skeleton className="h-6 w-32 mb-2" />
-                <Skeleton className="h-4 w-48 mb-4" />
-                <Skeleton className="h-2 w-full mb-4" />
-                <Skeleton className="h-16 w-full" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <CardSkeleton count={6} />
       ) : filteredProjects?.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">

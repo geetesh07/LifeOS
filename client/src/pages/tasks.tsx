@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { KanbanSkeleton, ListSkeleton } from "@/components/LoadingSkeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -36,9 +37,9 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { 
-  Plus, 
-  MoreHorizontal, 
+import {
+  Plus,
+  MoreHorizontal,
   Calendar as CalendarIcon,
   Clock,
   Trash2,
@@ -95,7 +96,7 @@ function TaskCard({ task, onEdit, onStatusChange, onDelete }: TaskCardProps) {
   const isOverdue = task.dueDate && isPast(new Date(task.dueDate)) && task.status !== "done";
 
   return (
-    <Card 
+    <Card
       className="group hover-elevate transition-all cursor-pointer"
       data-testid={`task-card-${task.id}`}
     >
@@ -131,8 +132,8 @@ function TaskCard({ task, onEdit, onStatusChange, onDelete }: TaskCardProps) {
                 <span className="text-xs text-muted-foreground">{priorityLabels[task.priority]}</span>
               </div>
               {task.dueDate && (
-                <Badge 
-                  variant="outline" 
+                <Badge
+                  variant="outline"
                   className={`text-xs ${isOverdue ? "border-red-500 text-red-500" : ""}`}
                 >
                   <CalendarIcon className="h-3 w-3 mr-1" />
@@ -150,9 +151,9 @@ function TaskCard({ task, onEdit, onStatusChange, onDelete }: TaskCardProps) {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
+              <Button
+                variant="ghost"
+                size="icon"
                 className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
                 data-testid={`task-menu-${task.id}`}
               >
@@ -165,7 +166,7 @@ function TaskCard({ task, onEdit, onStatusChange, onDelete }: TaskCardProps) {
                 Edit
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={() => onDelete(task.id)}
                 className="text-destructive"
               >
@@ -180,13 +181,13 @@ function TaskCard({ task, onEdit, onStatusChange, onDelete }: TaskCardProps) {
   );
 }
 
-function KanbanColumn({ 
-  status, 
-  tasks, 
-  onEdit, 
-  onStatusChange, 
-  onDelete 
-}: { 
+function KanbanColumn({
+  status,
+  tasks,
+  onEdit,
+  onStatusChange,
+  onDelete
+}: {
   status: typeof statusColumns[0];
   tasks: Task[];
   onEdit: (task: Task) => void;
@@ -220,13 +221,13 @@ function KanbanColumn({
   );
 }
 
-function TaskForm({ 
-  task, 
-  workspaceId, 
+function TaskForm({
+  task,
+  workspaceId,
   projects,
-  onClose 
-}: { 
-  task?: Task; 
+  onClose
+}: {
+  task?: Task;
   workspaceId: string;
   projects: Project[];
   onClose: () => void;
@@ -249,7 +250,7 @@ function TaskForm({
       return apiRequest("POST", "/api/tasks", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/tasks?workspaceId=${workspaceId}`] });
       toast({ title: "Task created successfully" });
       onClose();
     },
@@ -263,7 +264,7 @@ function TaskForm({
       return apiRequest("PATCH", `/api/tasks/${task?.id}`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/tasks?workspaceId=${workspaceId}`] });
       toast({ title: "Task updated successfully" });
       onClose();
     },
@@ -414,24 +415,24 @@ export default function Tasks() {
   const [editingTask, setEditingTask] = useState<Task | undefined>();
 
   const { data: tasks, isLoading } = useQuery<Task[]>({
-    queryKey: ["/api/tasks", currentWorkspace?.id],
+    queryKey: [`/api/tasks?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
   const { data: projects } = useQuery<Project[]>({
-    queryKey: ["/api/projects", currentWorkspace?.id],
+    queryKey: [`/api/projects?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ taskId, status }: { taskId: string; status: string }) => {
-      return apiRequest("PATCH", `/api/tasks/${taskId}`, { 
+      return apiRequest("PATCH", `/api/tasks/${taskId}`, {
         status,
         completedAt: status === "done" ? new Date() : null,
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/tasks?workspaceId=${currentWorkspace?.id}`] });
     },
   });
 
@@ -440,7 +441,7 @@ export default function Tasks() {
       return apiRequest("DELETE", `/api/tasks/${taskId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/tasks?workspaceId=${currentWorkspace?.id}`] });
       toast({ title: "Task deleted" });
     },
   });
@@ -563,15 +564,11 @@ export default function Tasks() {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="space-y-3">
-              <Skeleton className="h-8 w-32" />
-              <Skeleton className="h-32 w-full" />
-              <Skeleton className="h-32 w-full" />
-            </div>
-          ))}
-        </div>
+        view === "kanban" ? (
+          <KanbanSkeleton count={3} />
+        ) : (
+          <ListSkeleton count={5} />
+        )
       ) : view === "kanban" ? (
         <div className="flex gap-6 overflow-x-auto pb-4">
           {statusColumns.map((status) => (
