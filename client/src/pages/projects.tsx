@@ -47,8 +47,8 @@ import {
 import { useWorkspace } from "@/lib/workspace-context";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { format } from "date-fns";
-import type { Project, Client, Task, TimeEntry, InsertProject } from "@shared/schema";
+import { format, formatDistanceToNow } from "date-fns";
+import type { Project, TimeEntry, Client, InsertProject, Task } from "@shared/schema";
 
 const colorOptions = [
   { value: "#3B82F6", label: "Blue" },
@@ -193,12 +193,15 @@ function ProjectForm({
 
         <div className="space-y-2">
           <label className="text-sm font-medium">Client</label>
-          <Select value={clientId} onValueChange={setClientId}>
+          <Select
+            value={clientId || "_none"}
+            onValueChange={(val) => setClientId(val === "_none" ? "" : val)}
+          >
             <SelectTrigger data-testid="select-project-client">
               <SelectValue placeholder="Select client" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">No client</SelectItem>
+              <SelectItem value="_none">No client</SelectItem>
               {clients.map((client) => (
                 <SelectItem key={client.id} value={client.id}>
                   {client.name}
@@ -211,7 +214,7 @@ function ProjectForm({
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <label className="text-sm font-medium">Budget ($)</label>
+          <label className="text-sm font-medium">Budget (₹)</label>
           <Input
             type="number"
             value={budget}
@@ -224,7 +227,7 @@ function ProjectForm({
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium">Hourly Rate ($)</label>
+          <label className="text-sm font-medium">Hourly Rate (₹)</label>
           <Input
             type="number"
             value={hourlyRate}
@@ -410,17 +413,17 @@ export default function Projects() {
   });
 
   const { data: clients } = useQuery<Client[]>({
-    queryKey: ["/api/clients", currentWorkspace?.id],
-    enabled: !!currentWorkspace,
-  });
-
-  const { data: tasks } = useQuery<Task[]>({
-    queryKey: ["/api/tasks", currentWorkspace?.id],
+    queryKey: [`/api/clients?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
   const { data: timeEntries } = useQuery<TimeEntry[]>({
     queryKey: ["/api/time-entries", currentWorkspace?.id],
+    enabled: !!currentWorkspace,
+  });
+
+  const { data: tasks } = useQuery<Task[]>({
+    queryKey: [`/api/tasks?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 

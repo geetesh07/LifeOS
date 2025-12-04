@@ -1,9 +1,10 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
+import { initializeDefaultStatuses } from "./lib/initializeStatuses";
 import {
   insertWorkspaceSchema, insertClientSchema, insertProjectSchema,
-  insertTaskSchema, insertTimeEntrySchema, insertHabitSchema,
+  insertTaskStatusSchema, insertTaskSchema, insertTimeEntrySchema, insertHabitSchema,
   insertHabitCompletionSchema, insertDiaryEntrySchema, insertNoteSchema,
   insertEventSchema,
 } from "@shared/schema";
@@ -35,6 +36,8 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     try {
       const data = insertWorkspaceSchema.parse(req.body);
       const workspace = await storage.createWorkspace(data);
+      // Initialize default task statuses for new workspace
+      await initializeDefaultStatuses(workspace.id);
       res.status(201).json(workspace);
     } catch (error) {
       res.status(400).json({ error: "Invalid workspace data" });
@@ -129,10 +132,16 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
 
   app.post("/api/projects", async (req, res) => {
     try {
-      const data = insertProjectSchema.parse(req.body);
-      const project = await storage.createProject(data);
+      // Convert date strings to Date objects
+      const data = {
+        ...req.body,
+        dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
+      };
+      const validatedData = insertProjectSchema.parse(data);
+      const project = await storage.createProject(validatedData);
       res.status(201).json(project);
     } catch (error) {
+      console.error("Project creation error:", error);
       res.status(400).json({ error: "Invalid project data" });
     }
   });
@@ -161,6 +170,86 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     }
   });
 
+  // Task Statuses
+  app.get("/api/task-statuses", async (req, res) => {
+    try {
+      const workspaceId = req.query.workspaceId as string;
+      if (!workspaceId || workspaceId === 'undefined') {
+        console.log("[API] Task statuses request missing workspaceId");
+        return res.status(400).json({ error: "workspaceId is required" });
+      }
+      console.log(`[API] Fetching task statuses for workspace: ${workspaceId}`);
+      const statuses = await storage.getTaskStatuses(workspaceId);
+      console.log(`[API] Found ${statuses.length} statuses for workspace ${workspaceId}`);
+
+      // If no statuses exist, initialize them
+      if (statuses.length === 0) {
+        console.log(`[API] No statuses found, initializing defaults for workspace ${workspaceId}`);
+        const result = await initializeDefaultStatuses(workspaceId);
+        console.log(`[API] Initialized ${result.count} default statuses`);
+        // Fetch again after initialization
+        const newStatuses = await storage.getTaskStatuses(workspaceId);
+        return res.json(newStatuses);
+      }
+
+      res.json(statuses);
+    } catch (error) {
+      console.error("[API] Error fetching task statuses:", error);
+      res.status(500).json({ error: "Failed to fetch task statuses" });
+    }
+  });
+
+  app.post("/api/task-statuses", async (req, res) => {
+    try {
+      const data = insertTaskStatusSchema.parse(req.body);
+      const status = await storage.createTaskStatus(data);
+      res.status(201).json(status);
+    } catch (error) {
+      console.error("Task status creation error:", error);
+      res.status(400).json({ error: "Invalid task status data" });
+    }
+  });
+
+  app.patch("/api/task-statuses/:id", async (req, res) => {
+    try {
+      const status = await storage.updateTaskStatus(req.params.id, req.body);
+      if (!status) {
+        return res.status(404).json({ error: "Task status not found" });
+      }
+      res.json(status);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update task status" });
+    }
+  });
+
+  app.delete("/api/task-statuses/:id", async (req, res) => {
+    try {
+      const success = await storage.deleteTaskStatus(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Task status not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete task status" });
+    }
+  });
+
+  app.patch("/api/task-statuses/reorder", async (req, res) => {
+    try {
+      const { workspaceId, statusIds } = req.body;
+      if (!workspaceId || !statusIds || !Array.isArray(statusIds)) {
+        return res.status(400).json({ error: "Invalid request data" });
+      }
+      const success = await storage.reorderTaskStatuses(workspaceId, statusIds);
+      if (!success) {
+        return res.status(500).json({ error: "Failed to reorder statuses" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to reorder task statuses" });
+    }
+  });
+
   // Tasks
   app.get("/api/tasks", async (req, res) => {
     try {
@@ -177,8 +266,13 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
 
   app.post("/api/tasks", async (req, res) => {
     try {
-      const data = insertTaskSchema.parse(req.body);
-      const task = await storage.createTask(data);
+      // Convert date strings to Date objects (dates are serialized as strings over HTTP)
+      const data = {
+        ...req.body,
+        dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
+      };
+      const validatedData = insertTaskSchema.parse(data);
+      const task = await storage.createTask(validatedData);
       res.status(201).json(task);
     } catch (error) {
       console.error("Task creation error:", error);
@@ -188,12 +282,22 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
 
   app.patch("/api/tasks/:id", async (req, res) => {
     try {
-      const task = await storage.updateTask(req.params.id, req.body);
+      // Convert completedAt to Date if present
+      const updates = {
+        ...req.body,
+        ...(req.body.completedAt !== undefined && {
+          completedAt: req.body.completedAt ? new Date(req.body.completedAt) : null
+        }),
+      };
+
+      console.log(`[API] Updating task ${req.params.id}:`, updates);
+      const task = await storage.updateTask(req.params.id, updates);
       if (!task) {
         return res.status(404).json({ error: "Task not found" });
       }
       res.json(task);
     } catch (error) {
+      console.error("[API] Task update error:", error);
       res.status(500).json({ error: "Failed to update task" });
     }
   });
@@ -226,22 +330,41 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
 
   app.post("/api/time-entries", async (req, res) => {
     try {
-      const data = insertTimeEntrySchema.parse(req.body);
-      const entry = await storage.createTimeEntry(data);
+      // Convert date strings to Date objects (dates are serialized as strings over HTTP)
+      const data = {
+        ...req.body,
+        startTime: req.body.startTime ? new Date(req.body.startTime) : new Date(),
+        endTime: req.body.endTime ? new Date(req.body.endTime) : null,
+      };
+      const validatedData = insertTimeEntrySchema.parse(data);
+      const entry = await storage.createTimeEntry(validatedData);
       res.status(201).json(entry);
     } catch (error) {
-      res.status(400).json({ error: "Invalid time entry data" });
+      console.error("Time entry creation error:", error);
+      console.error("Request body:", req.body);
+      res.status(400).json({
+        error: "Invalid time entry data",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
 
   app.patch("/api/time-entries/:id", async (req, res) => {
     try {
-      const entry = await storage.updateTimeEntry(req.params.id, req.body);
+      // Convert date strings to Date objects if present
+      const updates = {
+        ...req.body,
+        ...(req.body.startTime && { startTime: new Date(req.body.startTime) }),
+        ...(req.body.endTime && { endTime: new Date(req.body.endTime) }),
+      };
+      const entry = await storage.updateTimeEntry(req.params.id, updates);
       if (!entry) {
         return res.status(404).json({ error: "Time entry not found" });
       }
       res.json(entry);
     } catch (error) {
+      console.error("Time entry update error:", error);
+      console.error("Update data:", req.body);
       res.status(500).json({ error: "Failed to update time entry" });
     }
   });
@@ -333,7 +456,10 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   // Diary Entries
   app.get("/api/diary-entries", async (req, res) => {
     try {
-      const workspaceId = req.query.workspaceId as string || "";
+      const workspaceId = req.query.workspaceId as string;
+      if (!workspaceId) {
+        return res.status(400).json({ error: "workspaceId is required" });
+      }
       const entries = await storage.getDiaryEntries(workspaceId);
       res.json(entries);
     } catch (error) {
@@ -343,11 +469,20 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
 
   app.post("/api/diary-entries", async (req, res) => {
     try {
-      const data = insertDiaryEntrySchema.parse(req.body);
-      const entry = await storage.createDiaryEntry(data);
+      // Ensure date is a Date object
+      const data = {
+        ...req.body,
+        date: req.body.date ? new Date(req.body.date) : new Date(),
+      };
+      const validatedData = insertDiaryEntrySchema.parse(data);
+      const entry = await storage.createDiaryEntry(validatedData);
       res.status(201).json(entry);
     } catch (error) {
-      res.status(400).json({ error: "Invalid diary entry data" });
+      console.error("Diary entry creation error:", error);
+      res.status(400).json({
+        error: "Invalid diary entry data",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
 
@@ -378,7 +513,10 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   // Notes
   app.get("/api/notes", async (req, res) => {
     try {
-      const workspaceId = req.query.workspaceId as string || "";
+      const workspaceId = req.query.workspaceId as string;
+      if (!workspaceId) {
+        return res.status(400).json({ error: "workspaceId is required" });
+      }
       const notes = await storage.getNotes(workspaceId);
       res.json(notes);
     } catch (error) {
@@ -423,7 +561,10 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   // Events
   app.get("/api/events", async (req, res) => {
     try {
-      const workspaceId = req.query.workspaceId as string || "";
+      const workspaceId = req.query.workspaceId as string;
+      if (!workspaceId) {
+        return res.status(400).json({ error: "workspaceId is required" });
+      }
       const events = await storage.getEvents(workspaceId);
       res.json(events);
     } catch (error) {
@@ -466,6 +607,41 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   });
 
   // Google Calendar Integration endpoints
+  // Google Calendar Integration
+  // Check connection status
+  app.get("/api/google-calendar/status", async (req, res) => {
+    try {
+      // Check if OAuth tokens exist (you'll need to implement token storage)
+      // For now, return a simple check
+      const hasCredentials = process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET;
+
+      // TODO: Check if user has connected their account
+      // This would require storing OAuth tokens per user
+
+      res.json({
+        configured: hasCredentials,
+        connected: false, // Will be true when user completes OAuth
+        message: hasCredentials ? "Ready to connect" : "Please configure Google OAuth credentials in .env"
+      });
+    } catch (error) {
+      console.error("Error checking Google Calendar status:", error);
+      res.status(500).json({ error: "Failed to check status" });
+    }
+  });
+
+  // Disconnect Google Calendar
+  app.post("/api/google-calendar/disconnect", async (req, res) => {
+    try {
+      // TODO: Revoke OAuth tokens and clear stored credentials
+      // This requires implementing token storage first
+
+      res.json({ success: true, message: "Disconnected from Google Calendar" });
+    } catch (error) {
+      console.error("Error disconnecting Google Calendar:", error);
+      res.status(500).json({ error: "Failed to disconnect" });
+    }
+  });
+
   app.get("/api/google-calendar/events", async (req, res) => {
     // This would integrate with Google Calendar API
     // For now, return empty array - integration setup will be handled separately
@@ -500,5 +676,60 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     }
     const settings = await storage.updateUserSettings(userId, req.body);
     res.json(settings);
+  });
+
+  // Admin endpoint to initialize statuses for existing workspaces
+  app.post("/api/admin/initialize-statuses", async (req, res) => {
+    try {
+      const workspaces = await storage.getWorkspaces();
+      let initialized = 0;
+
+      for (const workspace of workspaces) {
+        await initializeDefaultStatuses(workspace.id);
+        initialized++;
+      }
+
+      res.json({
+        success: true,
+        message: `Initialized statuses for ${initialized} workspaces`
+      });
+    } catch (error) {
+      console.error("Status initialization error:", error);
+      res.status(500).json({ error: "Failed to initialize statuses" });
+    }
+  });
+
+  // Admin endpoint to fix tasks with null statusId
+  app.post("/api/admin/fix-task-statuses", async (req, res) => {
+    try {
+      const workspaces = await storage.getWorkspaces();
+      let tasksFixed = 0;
+
+      for (const workspace of workspaces) {
+        const tasks = await storage.getTasks(workspace.id);
+        const statuses = await storage.getTaskStatuses(workspace.id);
+        const defaultStatus = statuses.find(s => s.isDefault);
+
+        if (!defaultStatus) {
+          console.log(`No default status for workspace ${workspace.name}`);
+          continue;
+        }
+
+        for (const task of tasks) {
+          if (!task.statusId) {
+            await storage.updateTask(task.id, { statusId: defaultStatus.id });
+            tasksFixed++;
+          }
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Fixed ${tasksFixed} tasks with missing status`
+      });
+    } catch (error) {
+      console.error("Task status fix error:", error);
+      res.status(500).json({ error: "Failed to fix task statuses" });
+    }
   });
 }

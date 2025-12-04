@@ -1,9 +1,11 @@
 import {
   workspaces, clients, projects, tasks, timeEntries,
   habits, habitCompletions, diaryEntries, notes, events, userSettings,
+  taskStatuses,
   type Workspace, type InsertWorkspace,
   type Client, type InsertClient,
   type Project, type InsertProject,
+  type TaskStatus, type InsertTaskStatus,
   type Task, type InsertTask,
   type TimeEntry, type InsertTimeEntry,
   type Habit, type InsertHabit,
@@ -38,6 +40,14 @@ export interface IStorage {
   createProject(data: InsertProject): Promise<Project>;
   updateProject(id: string, data: Partial<Project>): Promise<Project | undefined>;
   deleteProject(id: string): Promise<boolean>;
+
+  // Task Statuses
+  getTaskStatuses(workspaceId: string): Promise<TaskStatus[]>;
+  getTaskStatus(id: string): Promise<TaskStatus | undefined>;
+  createTaskStatus(data: InsertTaskStatus): Promise<TaskStatus>;
+  updateTaskStatus(id: string, data: Partial<TaskStatus>): Promise<TaskStatus | undefined>;
+  deleteTaskStatus(id: string): Promise<boolean>;
+  reorderTaskStatuses(workspaceId: string, statusIds: string[]): Promise<boolean>;
 
   // Tasks
   getTasks(workspaceId: string): Promise<Task[]>;
@@ -167,6 +177,50 @@ export class DatabaseStorage implements IStorage {
   async deleteProject(id: string): Promise<boolean> {
     const result = await db.delete(projects).where(eq(projects.id, id)).returning();
     return result.length > 0;
+  }
+
+  // Task Statuses
+  async getTaskStatuses(workspaceId: string): Promise<TaskStatus[]> {
+    return db.select().from(taskStatuses)
+      .where(eq(taskStatuses.workspaceId, workspaceId))
+      .orderBy(asc(taskStatuses.order));
+  }
+
+  async getTaskStatus(id: string): Promise<TaskStatus | undefined> {
+    const [status] = await db.select().from(taskStatuses).where(eq(taskStatuses.id, id));
+    return status;
+  }
+
+  async createTaskStatus(data: InsertTaskStatus): Promise<TaskStatus> {
+    const [status] = await db.insert(taskStatuses).values(data).returning();
+    return status;
+  }
+
+  async updateTaskStatus(id: string, data: Partial<TaskStatus>): Promise<TaskStatus | undefined> {
+    const [status] = await db.update(taskStatuses).set(data).where(eq(taskStatuses.id, id)).returning();
+    return status;
+  }
+
+  async deleteTaskStatus(id: string): Promise<boolean> {
+    const result = await db.delete(taskStatuses).where(eq(taskStatuses.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async reorderTaskStatuses(workspaceId: string, statusIds: string[]): Promise<boolean> {
+    try {
+      // Update the order of each status
+      for (let i = 0; i < statusIds.length; i++) {
+        await db.update(taskStatuses)
+          .set({ order: i })
+          .where(and(
+            eq(taskStatuses.id, statusIds[i]),
+            eq(taskStatuses.workspaceId, workspaceId)
+          ));
+      }
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   // Tasks

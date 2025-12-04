@@ -11,6 +11,7 @@ import {
   Settings,
   Users,
   Folder,
+  DollarSign,
 } from "lucide-react";
 import {
   Sidebar,
@@ -82,6 +83,11 @@ const manageItems = [
     title: "Clients",
     url: "/clients",
     icon: Users,
+  },
+  {
+    title: "Finances",
+    url: "/finances",
+    icon: DollarSign,
   },
   {
     title: "Reports",
@@ -172,20 +178,23 @@ export function AppSidebar({ onAddWorkspace }: AppSidebarProps) {
           <SidebarGroupLabel>Life</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {lifeItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location === item.url}
-                    tooltip={item.title}
-                  >
-                    <Link href={item.url} data-testid={`nav-${item.title.toLowerCase()}`}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {lifeItems
+                // Hide Diary for non-Life workspaces
+                .filter((item) => item.title !== "Diary" || currentWorkspace?.name === "Life")
+                .map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={location === item.url}
+                      tooltip={item.title}
+                    >
+                      <Link href={item.url} data-testid={`nav-${item.title.toLowerCase()}`}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

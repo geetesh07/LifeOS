@@ -149,6 +149,7 @@ function Timer({
       description: description || null,
       projectId: projectId || null,
       taskId: taskId || null,
+      isBillable: false,
     });
   };
 
@@ -201,7 +202,7 @@ function Timer({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="_none">No project</SelectItem>
-                  {projects.map((project) => (
+                  {projects.filter(p => p.id && p.id.trim() !== "").map((project) => (
                     <SelectItem key={project.id} value={project.id}>
                       <div className="flex items-center gap-2">
                         <div
@@ -225,7 +226,7 @@ function Timer({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="_none">No task</SelectItem>
-                  {filteredTasks.map((task) => (
+                  {filteredTasks.filter(t => t.id && t.id.trim() !== "").map((task) => (
                     <SelectItem key={task.id} value={task.id}>
                       {task.title}
                     </SelectItem>
@@ -410,18 +411,18 @@ export default function TimeTracker() {
   const [editDuration, setEditDuration] = useState("");
 
   const { data: timeEntries, isLoading: entriesLoading } = useQuery<TimeEntry[]>({
-    queryKey: [`/api/time-entries?workspaceId=${currentWorkspace?.id}`],
+    queryKey: currentWorkspace ? [`/api/time-entries?workspaceId=${currentWorkspace.id}`] : ['time-entries-disabled'],
     enabled: !!currentWorkspace,
     refetchInterval: 10000,
   });
 
   const { data: projects } = useQuery<Project[]>({
-    queryKey: [`/api/projects?workspaceId=${currentWorkspace?.id}`],
+    queryKey: currentWorkspace ? [`/api/projects?workspaceId=${currentWorkspace.id}`] : ['projects-disabled'],
     enabled: !!currentWorkspace,
   });
 
   const { data: tasks } = useQuery<Task[]>({
-    queryKey: [`/api/tasks?workspaceId=${currentWorkspace?.id}`],
+    queryKey: currentWorkspace ? [`/api/tasks?workspaceId=${currentWorkspace.id}`] : ['tasks-disabled'],
     enabled: !!currentWorkspace,
   });
 

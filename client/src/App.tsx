@@ -35,6 +35,7 @@ import Notes from "@/pages/notes";
 import Reports from "@/pages/reports";
 import Projects from "@/pages/projects";
 import Clients from "@/pages/clients";
+import Finances from "@/pages/finances";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
@@ -221,6 +222,11 @@ function Router() {
       <Route path="/clients">
         <ProtectedRoute>
           <Clients />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/finances">
+        <ProtectedRoute>
+          <Finances />
         </ProtectedRoute>
       </Route>
       <Route path="/settings">

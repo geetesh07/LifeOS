@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { 
-  BarChart3, 
+import {
+  BarChart3,
   Clock,
   CheckSquare,
   Target,
@@ -22,11 +22,11 @@ import {
   PieChart,
 } from "lucide-react";
 import { useWorkspace } from "@/lib/workspace-context";
-import { 
-  format, 
-  subDays, 
-  startOfWeek, 
-  endOfWeek, 
+import {
+  format,
+  subDays,
+  startOfWeek,
+  endOfWeek,
   startOfMonth,
   endOfMonth,
   eachDayOfInterval,
@@ -77,7 +77,7 @@ function OverviewStats({
 }) {
   const now = new Date();
   let startDate: Date;
-  
+
   switch (dateRange) {
     case "week":
       startDate = startOfWeek(now, { weekStartsOn: 1 });
@@ -90,50 +90,50 @@ function OverviewStats({
       break;
   }
 
-  const filteredTasks = tasks.filter(t => 
+  const filteredTasks = tasks.filter(t =>
     t.completedAt && new Date(t.completedAt) >= startDate
   );
 
-  const filteredTimeEntries = timeEntries.filter(e => 
+  const filteredTimeEntries = timeEntries.filter(e =>
     new Date(e.startTime) >= startDate && e.durationMinutes
   );
 
-  const filteredCompletions = completions.filter(c => 
+  const filteredCompletions = completions.filter(c =>
     new Date(c.date) >= startDate
   );
 
   const totalMinutes = filteredTimeEntries.reduce((acc, e) => acc + (e.durationMinutes || 0), 0);
   const tasksCompleted = filteredTasks.length;
   const habitCompletionsCount = filteredCompletions.length;
-  
+
   const avgDailyMinutes = Math.round(totalMinutes / Math.max(differenceInDays(now, startDate), 1));
 
   const stats = [
-    { 
-      label: "Tasks Completed", 
-      value: tasksCompleted, 
-      icon: CheckSquare, 
+    {
+      label: "Tasks Completed",
+      value: tasksCompleted,
+      icon: CheckSquare,
       color: "text-blue-500",
       bgColor: "bg-blue-500/10",
     },
-    { 
-      label: "Time Tracked", 
-      value: formatDuration(totalMinutes), 
-      icon: Clock, 
+    {
+      label: "Time Tracked",
+      value: formatDuration(totalMinutes),
+      icon: Clock,
       color: "text-purple-500",
       bgColor: "bg-purple-500/10",
     },
-    { 
-      label: "Habit Check-ins", 
-      value: habitCompletionsCount, 
-      icon: Target, 
+    {
+      label: "Habit Check-ins",
+      value: habitCompletionsCount,
+      icon: Target,
       color: "text-green-500",
       bgColor: "bg-green-500/10",
     },
-    { 
-      label: "Avg. Daily Time", 
-      value: formatDuration(avgDailyMinutes), 
-      icon: TrendingUp, 
+    {
+      label: "Avg. Daily Time",
+      value: formatDuration(avgDailyMinutes),
+      icon: TrendingUp,
       color: "text-orange-500",
       bgColor: "bg-orange-500/10",
     },
@@ -171,12 +171,12 @@ function TimeByDayChart({
 }) {
   const now = new Date();
   let days: Date[];
-  
+
   switch (dateRange) {
     case "week":
-      days = eachDayOfInterval({ 
-        start: startOfWeek(now, { weekStartsOn: 1 }), 
-        end: endOfWeek(now, { weekStartsOn: 1 }) 
+      days = eachDayOfInterval({
+        start: startOfWeek(now, { weekStartsOn: 1 }),
+        end: endOfWeek(now, { weekStartsOn: 1 })
       });
       break;
     case "month":
@@ -190,13 +190,13 @@ function TimeByDayChart({
   const data = days.map(day => {
     const dayEntries = dateRange === "year"
       ? timeEntries.filter(e => {
-          const d = new Date(e.startTime);
-          return d.getMonth() === day.getMonth() && d.getFullYear() === day.getFullYear();
-        })
+        const d = new Date(e.startTime);
+        return d.getMonth() === day.getMonth() && d.getFullYear() === day.getFullYear();
+      })
       : timeEntries.filter(e => isSameDay(new Date(e.startTime), day));
-    
+
     const minutes = dayEntries.reduce((acc, e) => acc + (e.durationMinutes || 0), 0);
-    
+
     return {
       name: dateRange === "year" ? format(day, "MMM") : format(day, "EEE"),
       hours: Math.round((minutes / 60) * 10) / 10,
@@ -217,12 +217,12 @@ function TimeByDayChart({
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis 
-                dataKey="name" 
+              <XAxis
+                dataKey="name"
                 className="text-xs fill-muted-foreground"
                 tick={{ fontSize: 12 }}
               />
-              <YAxis 
+              <YAxis
                 className="text-xs fill-muted-foreground"
                 tick={{ fontSize: 12 }}
                 label={{ value: 'Hours', angle: -90, position: 'insideLeft', className: 'fill-muted-foreground' }}
@@ -324,7 +324,7 @@ function TimeByProjectChart({
                     return null;
                   }}
                 />
-                <Legend 
+                <Legend
                   formatter={(value: string) => (
                     <span className="text-sm">{value}</span>
                   )}
@@ -347,12 +347,12 @@ function TaskCompletionChart({
 }) {
   const now = new Date();
   let days: Date[];
-  
+
   switch (dateRange) {
     case "week":
-      days = eachDayOfInterval({ 
-        start: startOfWeek(now, { weekStartsOn: 1 }), 
-        end: endOfWeek(now, { weekStartsOn: 1 }) 
+      days = eachDayOfInterval({
+        start: startOfWeek(now, { weekStartsOn: 1 }),
+        end: endOfWeek(now, { weekStartsOn: 1 })
       });
       break;
     case "month":
@@ -366,12 +366,12 @@ function TaskCompletionChart({
   const data = days.map(day => {
     const completedTasks = dateRange === "year"
       ? tasks.filter(t => {
-          if (!t.completedAt) return false;
-          const d = new Date(t.completedAt);
-          return d.getMonth() === day.getMonth() && d.getFullYear() === day.getFullYear();
-        })
+        if (!t.completedAt) return false;
+        const d = new Date(t.completedAt);
+        return d.getMonth() === day.getMonth() && d.getFullYear() === day.getFullYear();
+      })
       : tasks.filter(t => t.completedAt && isSameDay(new Date(t.completedAt), day));
-    
+
     return {
       name: dateRange === "year" ? format(day, "MMM") : format(day, "EEE"),
       completed: completedTasks.length,
@@ -391,12 +391,12 @@ function TaskCompletionChart({
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis 
-                dataKey="name" 
+              <XAxis
+                dataKey="name"
                 className="text-xs fill-muted-foreground"
                 tick={{ fontSize: 12 }}
               />
-              <YAxis 
+              <YAxis
                 className="text-xs fill-muted-foreground"
                 tick={{ fontSize: 12 }}
                 allowDecimals={false}
@@ -416,10 +416,10 @@ function TaskCompletionChart({
                   return null;
                 }}
               />
-              <Line 
-                type="monotone" 
-                dataKey="completed" 
-                stroke="hsl(var(--chart-2))" 
+              <Line
+                type="monotone"
+                dataKey="completed"
+                stroke="hsl(var(--chart-2))"
                 strokeWidth={2}
                 dot={{ fill: "hsl(var(--chart-2))" }}
               />
@@ -456,7 +456,7 @@ function HabitStreaksSummary({ habits }: { habits: Habit[] }) {
               <span className="text-lg font-bold text-muted-foreground w-6">
                 #{index + 1}
               </span>
-              <div 
+              <div
                 className="w-8 h-8 rounded-lg flex items-center justify-center"
                 style={{ backgroundColor: habit.color + "20" }}
               >
@@ -485,29 +485,56 @@ export default function Reports() {
   const [dateRange, setDateRange] = useState<DateRange>("week");
 
   const { data: tasks, isLoading: tasksLoading } = useQuery<Task[]>({
-    queryKey: ["/api/tasks", currentWorkspace?.id],
+    queryKey: [`/api/tasks?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
   const { data: timeEntries, isLoading: timeLoading } = useQuery<TimeEntry[]>({
-    queryKey: ["/api/time-entries", currentWorkspace?.id],
+    queryKey: [`/api/time-entries?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
   const { data: habits } = useQuery<Habit[]>({
-    queryKey: ["/api/habits", currentWorkspace?.id],
+    queryKey: [`/api/habits?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
   const { data: completions } = useQuery<HabitCompletion[]>({
-    queryKey: ["/api/habit-completions", currentWorkspace?.id],
+    queryKey: [`/api/habit-completions?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
   const { data: projects } = useQuery<Project[]>({
-    queryKey: ["/api/projects", currentWorkspace?.id],
+    queryKey: [`/api/projects?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
+
+  // Debug logging
+  useEffect(() => {
+    if (currentWorkspace) {
+      console.log('[Reports] Current workspace:', currentWorkspace.id, currentWorkspace.name);
+    }
+  }, [currentWorkspace]);
+
+  useEffect(() => {
+    console.log('[Reports] Tasks loaded:', tasks?.length || 0, tasks);
+  }, [tasks]);
+
+  useEffect(() => {
+    console.log('[Reports] Time entries loaded:', timeEntries?.length || 0, timeEntries);
+  }, [timeEntries]);
+
+  useEffect(() => {
+    console.log('[Reports] Habits loaded:', habits?.length || 0);
+  }, [habits]);
+
+  useEffect(() => {
+    console.log('[Reports] Completions loaded:', completions?.length || 0);
+  }, [completions]);
+
+  useEffect(() => {
+    console.log('[Reports] Projects loaded:', projects?.length || 0);
+  }, [projects]);
 
   const isLoading = tasksLoading || timeLoading;
 

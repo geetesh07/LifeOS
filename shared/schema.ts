@@ -6,7 +6,7 @@ import { z } from "zod";
 // Workspaces - containers for organizing life areas
 export const workspaces = pgTable("workspaces", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: text("user_id").notNull(),
+  userId: text("user_id"), // Nullable - workspaces can be shared or unassigned
   name: text("name").notNull(),
   color: text("color").notNull().default("#3B82F6"),
   icon: text("icon").notNull().default("briefcase"),
@@ -63,6 +63,77 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   timeEntries: many(timeEntries),
 }));
 
+// Task Statuses - custom workflow states per workspace
+export const taskStatuses = pgTable("task_statuses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  workspaceId: varchar("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  color: text("color").notNull(),
+  order: integer("order").notNull().default(0),
+  isDefault: boolean("is_default").notNull().default(false),
+  isDoneState: boolean("is_done_state").notNull().default(false),
+});
+
+export const taskStatusesRelations = relations(taskStatuses, ({ one, many }) => ({
+  workspace: one(workspaces, { fields: [taskStatuses.workspaceId], references: [workspaces.id] }),
+  tasks: many(tasks),
+}));
+
+// Payments
+export const payments = pgTable("payments", {
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  workspaceId: varchar("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  clientId: varchar("client_id").references(() => clients.id, { onDelete: "set null" }),
+  projectId: varchar("project_id").references(() => projects.id, { onDelete: "set null" }),
+  amount: real("amount").notNull(),
+  currency: varchar("currency").notNull().default("INR"),
+  description: text("description"),
+  paymentDate: timestamp("payment_date").notNull(),
+  paymentMethod: varchar("payment_method"),
+  status: varchar("status").notNull().default("received"),
+  invoiceNumber: varchar("invoice_number"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  workspace: one(workspaces, { fields: [payments.workspaceId], references: [workspaces.id] }),
+  client: one(clients, { fields: [payments.clientId], references: [clients.id] }),
+  project: one(projects, { fields: [payments.projectId], references: [projects.id] }),
+}));
+
+// Expenses
+export const expenses = pgTable("expenses", {
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  workspaceId: varchar("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  projectId: varchar("project_id").references(() => projects.id, { onDelete: "set null" }),
+  amount: real("amount").notNull(),
+  currency: varchar("currency").notNull().default("INR"),
+  category: varchar("category").notNull(),
+  description: text("description"),
+  expenseDate: timestamp("expense_date").notNull(),
+  vendor: varchar("vendor"),
+  receiptUrl: text("receipt_url"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const expensesRelations = relations(expenses, ({ one }) => ({
+  workspace: one(workspaces, { fields: [expenses.workspaceId], references: [workspaces.id] }),
+  project: one(projects, { fields: [expenses.projectId], references: [projects.id] }),
+}));
+
+// Quick Todos
+export const quickTodos = pgTable("quick_todos", {
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  workspaceId: varchar("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  completed: boolean("completed").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const quickTodosRelations = relations(quickTodos, ({ one }) => ({
+  workspace: one(workspaces, { fields: [quickTodos.workspaceId], references: [workspaces.id] }),
+}));
+
 // Tasks - core productivity unit
 export const tasks = pgTable("tasks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -71,7 +142,8 @@ export const tasks = pgTable("tasks", {
   parentTaskId: varchar("parent_task_id"),
   title: text("title").notNull(),
   description: text("description"),
-  status: text("status").notNull().default("todo"), // todo, in_progress, done
+  status: text("status").notNull().default("todo"), // todo, in_progress, done (legacy - will be replaced by statusId)
+  statusId: varchar("status_id").references(() => taskStatuses.id, { onDelete: "set null" }),
   priority: text("priority").notNull().default("medium"), // low, medium, high, urgent
   color: text("color"),
   dueDate: timestamp("due_date"),
@@ -84,6 +156,7 @@ export const tasks = pgTable("tasks", {
 export const tasksRelations = relations(tasks, ({ one, many }) => ({
   workspace: one(workspaces, { fields: [tasks.workspaceId], references: [workspaces.id] }),
   project: one(projects, { fields: [tasks.projectId], references: [projects.id] }),
+  taskStatus: one(taskStatuses, { fields: [tasks.statusId], references: [taskStatuses.id] }),
   parentTask: one(tasks, { fields: [tasks.parentTaskId], references: [tasks.id], relationName: "subtasks" }),
   subtasks: many(tasks, { relationName: "subtasks" }),
   timeEntries: many(timeEntries),
@@ -205,6 +278,7 @@ export const userSettings = pgTable("user_settings", {
 export const insertWorkspaceSchema = createInsertSchema(workspaces).omit({ id: true });
 export const insertClientSchema = createInsertSchema(clients).omit({ id: true });
 export const insertProjectSchema = createInsertSchema(projects).omit({ id: true });
+export const insertTaskStatusSchema = createInsertSchema(taskStatuses).omit({ id: true });
 export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true });
 export const insertTimeEntrySchema = createInsertSchema(timeEntries).omit({ id: true });
 export const insertHabitSchema = createInsertSchema(habits).omit({ id: true });
@@ -213,6 +287,9 @@ export const insertDiaryEntrySchema = createInsertSchema(diaryEntries).omit({ id
 export const insertNoteSchema = createInsertSchema(notes).omit({ id: true });
 export const insertEventSchema = createInsertSchema(events).omit({ id: true });
 export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({ id: true });
+export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true });
+export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true });
+export const insertQuickTodoSchema = createInsertSchema(quickTodos).omit({ id: true });
 
 // Types
 export type Workspace = typeof workspaces.$inferSelect;
@@ -221,6 +298,8 @@ export type Client = typeof clients.$inferSelect;
 export type InsertClient = z.infer<typeof insertClientSchema>;
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
+export type TaskStatus = typeof taskStatuses.$inferSelect;
+export type InsertTaskStatus = z.infer<typeof insertTaskStatusSchema>;
 export type Task = typeof tasks.$inferSelect;
 export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type TimeEntry = typeof timeEntries.$inferSelect;
@@ -237,6 +316,12 @@ export type Event = typeof events.$inferSelect;
 export type InsertEvent = z.infer<typeof insertEventSchema>;
 export type UserSettings = typeof userSettings.$inferSelect;
 export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
+export type Payment = typeof payments.$inferSelect;
+export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+export type Expense = typeof expenses.$inferSelect;
+export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+export type QuickTodo = typeof quickTodos.$inferSelect;
+export type InsertQuickTodo = z.infer<typeof insertQuickTodoSchema>;
 
 // Legacy user schema for compatibility
 export const users = pgTable("users", {

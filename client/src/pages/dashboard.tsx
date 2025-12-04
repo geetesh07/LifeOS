@@ -127,6 +127,8 @@ function StatsCards({
 }
 
 function UpcomingTasks({ tasks }: { tasks: Task[] | undefined }) {
+  const { workspaces } = useWorkspace();
+
   const upcomingTasks = tasks
     ?.filter(t => t.status !== "done" && t.dueDate)
     .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime())
@@ -145,6 +147,14 @@ function UpcomingTasks({ tasks }: { tasks: Task[] | undefined }) {
     if (isToday(date)) return "Today";
     if (isTomorrow(date)) return "Tomorrow";
     return format(date, "MMM d");
+  };
+
+  const getWorkspaceName = (workspaceId: string) => {
+    return workspaces?.find(w => w.id === workspaceId)?.name || "Unknown";
+  };
+
+  const getWorkspaceColor = (workspaceId: string) => {
+    return workspaces?.find(w => w.id === workspaceId)?.color || "#6B7280";
   };
 
   return (
@@ -173,9 +183,21 @@ function UpcomingTasks({ tasks }: { tasks: Task[] | undefined }) {
               <div className={`w-1.5 h-8 rounded-full ${getPriorityColor(task.priority)}`} />
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{task.title}</p>
-                <p className="text-xs text-muted-foreground">
-                  {task.dueDate && formatDueDate(new Date(task.dueDate))}
-                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge
+                    variant="outline"
+                    className="text-xs"
+                    style={{
+                      borderColor: getWorkspaceColor(task.workspaceId),
+                      color: getWorkspaceColor(task.workspaceId)
+                    }}
+                  >
+                    {getWorkspaceName(task.workspaceId)}
+                  </Badge>
+                  <p className="text-xs text-muted-foreground">
+                    {task.dueDate && formatDueDate(new Date(task.dueDate))}
+                  </p>
+                </div>
               </div>
               <Badge variant="outline" className="text-xs">
                 {task.priority}
@@ -321,19 +343,44 @@ function RecentTimeEntries({ timeEntries }: { timeEntries: TimeEntry[] | undefin
 export default function Dashboard() {
   const { currentWorkspace } = useWorkspace();
 
+  // Fetch data from ALL workspaces for unified dashboard
   const { data: tasks, isLoading: tasksLoading } = useQuery<Task[]>({
-    queryKey: ["/api/tasks", currentWorkspace?.id],
-    enabled: !!currentWorkspace,
+    queryKey: ["/api/tasks/all"],
+    queryFn: async () => {
+      const workspaces = await fetch("/api/workspaces").then(r => r.json());
+      const allTasks = await Promise.all(
+        workspaces.map((ws: any) =>
+          fetch(`/api/tasks?workspaceId=${ws.id}`).then(r => r.json())
+        )
+      );
+      return allTasks.flat();
+    },
   });
 
   const { data: habits, isLoading: habitsLoading } = useQuery<Habit[]>({
-    queryKey: ["/api/habits", currentWorkspace?.id],
-    enabled: !!currentWorkspace,
+    queryFn: async () => {
+      const workspaces = await fetch("/api/workspaces").then(r => r.json());
+      const allHabits = await Promise.all(
+        workspaces.map((ws: any) =>
+          fetch(`/api/habits?workspaceId=${ws.id}`).then(r => r.json())
+        )
+      );
+      return allHabits.flat();
+    },
+    queryKey: ["/api/habits/all"],
   });
 
   const { data: timeEntries, isLoading: timeLoading } = useQuery<TimeEntry[]>({
-    queryKey: ["/api/time-entries", currentWorkspace?.id],
-    enabled: !!currentWorkspace,
+    queryFn: async () => {
+      const workspaces = await fetch("/api/workspaces").then(r => r.json());
+      const allEntries = await Promise.all(
+        workspaces.map((ws: any) =>
+          fetch(`/api/time-entries?workspaceId=${ws.id}`).then(r => r.json())
+        )
+      );
+      return allEntries.flat();
+    },
+    queryKey: ["/api/time-entries/all"],
   });
 
   const today = new Date();

@@ -57,7 +57,9 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format, isToday, isTomorrow, isPast } from "date-fns";
-import type { Task, Project, InsertTask } from "@shared/schema";
+import type { Task, Project, InsertTask, TaskStatus } from "@shared/schema";
+import { EnhancedKanban } from "@/components/EnhancedKanban";
+import { StatusManager } from "@/components/StatusManager";
 
 const priorityColors: Record<string, string> = {
   urgent: "bg-red-500",
@@ -73,11 +75,7 @@ const priorityLabels: Record<string, string> = {
   low: "Low",
 };
 
-const statusColumns = [
-  { id: "todo", label: "To Do", color: "bg-slate-500" },
-  { id: "in_progress", label: "In Progress", color: "bg-blue-500" },
-  { id: "done", label: "Done", color: "bg-green-500" },
-];
+
 
 interface TaskCardProps {
   task: Task;
@@ -181,62 +179,25 @@ function TaskCard({ task, onEdit, onStatusChange, onDelete }: TaskCardProps) {
   );
 }
 
-function KanbanColumn({
-  status,
-  tasks,
-  onEdit,
-  onStatusChange,
-  onDelete
-}: {
-  status: typeof statusColumns[0];
-  tasks: Task[];
-  onEdit: (task: Task) => void;
-  onStatusChange: (taskId: string, status: string) => void;
-  onDelete: (taskId: string) => void;
-}) {
-  return (
-    <div className="flex-1 min-w-[300px]" data-testid={`kanban-column-${status.id}`}>
-      <div className="flex items-center gap-2 mb-4">
-        <div className={`w-3 h-3 rounded-full ${status.color}`} />
-        <h3 className="font-semibold">{status.label}</h3>
-        <Badge variant="secondary" className="ml-auto">{tasks.length}</Badge>
-      </div>
-      <div className="space-y-3">
-        {tasks.map((task) => (
-          <TaskCard
-            key={task.id}
-            task={task}
-            onEdit={onEdit}
-            onStatusChange={onStatusChange}
-            onDelete={onDelete}
-          />
-        ))}
-        {tasks.length === 0 && (
-          <div className="p-8 text-center text-muted-foreground border-2 border-dashed rounded-lg">
-            <p className="text-sm">No tasks</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function TaskForm({
   task,
   workspaceId,
   projects,
+  statuses,
   onClose
 }: {
   task?: Task;
   workspaceId: string;
   projects: Project[];
+  statuses: TaskStatus[];
   onClose: () => void;
 }) {
   const { toast } = useToast();
   const [title, setTitle] = useState(task?.title || "");
   const [description, setDescription] = useState(task?.description || "");
   const [priority, setPriority] = useState(task?.priority || "medium");
-  const [status, setStatus] = useState(task?.status || "todo");
+  const defaultStatus = statuses.find(s => s.isDefault);
+  const [statusId, setStatusId] = useState(task?.statusId || defaultStatus?.id || "");
   const [projectId, setProjectId] = useState(task?.projectId || "");
   const [dueDate, setDueDate] = useState(
     task?.dueDate ? format(new Date(task.dueDate), "yyyy-MM-dd") : ""
@@ -280,7 +241,7 @@ function TaskForm({
       title,
       description: description || null,
       priority,
-      status,
+      statusId: statusId || null,
       projectId: projectId || null,
       dueDate: dueDate ? new Date(dueDate) : null,
       estimatedMinutes: estimatedMinutes ? parseInt(estimatedMinutes) : null,
@@ -337,14 +298,25 @@ function TaskForm({
 
         <div className="space-y-2">
           <label className="text-sm font-medium">Status</label>
-          <Select value={status} onValueChange={setStatus}>
+          <Select value={statusId} onValueChange={setStatusId}>
             <SelectTrigger data-testid="select-task-status">
-              <SelectValue />
+              <SelectValue placeholder={statuses.length === 0 ? "No statuses available" : "Select status"} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todo">To Do</SelectItem>
-              <SelectItem value="in_progress">In Progress</SelectItem>
-              <SelectItem value="done">Done</SelectItem>
+              {statuses.length === 0 ? (
+                <div className="p-2 text-sm text-muted-foreground">
+                  No statuses available. Please add statuses in settings.
+                </div>
+              ) : (
+                statuses.map((status) => (
+                  <SelectItem key={status.id} value={status.id}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: status.color }} />
+                      {status.name}
+                    </div>
+                  </SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
         </div>
@@ -377,12 +349,15 @@ function TaskForm({
       {projects.length > 0 && (
         <div className="space-y-2">
           <label className="text-sm font-medium">Project</label>
-          <Select value={projectId} onValueChange={setProjectId}>
+          <Select
+            value={projectId || "_none"}
+            onValueChange={(val) => setProjectId(val === "_none" ? "" : val)}
+          >
             <SelectTrigger data-testid="select-task-project">
               <SelectValue placeholder="Select a project" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">No project</SelectItem>
+              <SelectItem value="_none">No project</SelectItem>
               {projects.map((project) => (
                 <SelectItem key={project.id} value={project.id}>
                   {project.name}
@@ -411,6 +386,7 @@ export default function Tasks() {
   const [view, setView] = useState<"kanban" | "list">("kanban");
   const [searchQuery, setSearchQuery] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [projectFilter, setProjectFilter] = useState<string>("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | undefined>();
 
@@ -424,11 +400,18 @@ export default function Tasks() {
     enabled: !!currentWorkspace,
   });
 
+  const { data: statuses } = useQuery<TaskStatus[]>({
+    queryKey: [`/api/task-statuses?workspaceId=${currentWorkspace?.id}`],
+    enabled: !!currentWorkspace,
+  });
+
   const updateStatusMutation = useMutation({
-    mutationFn: async ({ taskId, status }: { taskId: string; status: string }) => {
+    mutationFn: async ({ taskId, statusId }: { taskId: string; statusId: string }) => {
+      // Find if the new status is a "done" state
+      const status = statuses?.find(s => s.id === statusId);
       return apiRequest("PATCH", `/api/tasks/${taskId}`, {
-        status,
-        completedAt: status === "done" ? new Date() : null,
+        statusId,
+        completedAt: status?.isDoneState ? new Date() : null,
       });
     },
     onSuccess: () => {
@@ -451,8 +434,8 @@ export default function Tasks() {
     setIsDialogOpen(true);
   };
 
-  const handleStatusChange = (taskId: string, status: string) => {
-    updateStatusMutation.mutate({ taskId, status });
+  const handleTaskMove = (taskId: string, newStatusId: string) => {
+    updateStatusMutation.mutate({ taskId, statusId: newStatusId });
   };
 
   const handleDelete = (taskId: string) => {
@@ -464,17 +447,13 @@ export default function Tasks() {
     setEditingTask(undefined);
   };
 
-  const filteredTasks = tasks?.filter((task) => {
+  const filteredTasks = tasks?.filter(task => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter;
-    return matchesSearch && matchesPriority;
+    const matchesPriority = priorityFilter === 'all' || task.priority === priorityFilter;
+    const matchesProject = projectFilter === 'all' || task.projectId === projectFilter;
+    return matchesSearch && matchesPriority && matchesProject;
   });
-
-  const tasksByStatus = statusColumns.reduce((acc, status) => {
-    acc[status.id] = filteredTasks?.filter(t => t.status === status.id) || [];
-    return acc;
-  }, {} as Record<string, Task[]>);
 
   if (!currentWorkspace) {
     return (
@@ -493,28 +472,48 @@ export default function Tasks() {
             Manage your tasks and stay productive
           </p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => setEditingTask(undefined)} data-testid="button-new-task">
-              <Plus className="h-4 w-4 mr-2" />
-              New Task
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>{editingTask ? "Edit Task" : "Create New Task"}</DialogTitle>
-              <DialogDescription>
-                {editingTask ? "Update the task details below" : "Add a new task to your workspace"}
-              </DialogDescription>
-            </DialogHeader>
-            <TaskForm
-              task={editingTask}
-              workspaceId={currentWorkspace.id}
-              projects={projects || []}
-              onClose={handleCloseDialog}
-            />
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                Manage Statuses
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[600px]">
+              <DialogHeader>
+                <DialogTitle>Manage Task Statuses</DialogTitle>
+                <DialogDescription>
+                  Customize your workflow by adding, editing, or reordering statuses
+                </DialogDescription>
+              </DialogHeader>
+              <StatusManager workspaceId={currentWorkspace.id} />
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => setEditingTask(undefined)} data-testid="button-new-task">
+                <Plus className="h-4 w-4 mr-2" />
+                New Task
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>{editingTask ? "Edit Task" : "Create New Task"}</DialogTitle>
+                <DialogDescription>
+                  {editingTask ? "Update the task details below" : "Add a new task to your workspace"}
+                </DialogDescription>
+              </DialogHeader>
+              <TaskForm
+                task={editingTask}
+                workspaceId={currentWorkspace.id}
+                projects={projects || []}
+                statuses={statuses || []}
+                onClose={handleCloseDialog}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4">
@@ -529,6 +528,25 @@ export default function Tasks() {
           />
         </div>
         <div className="flex gap-2">
+          {projects && projects.length > 0 && (
+            <Select value={projectFilter} onValueChange={setProjectFilter}>
+              <SelectTrigger className="w-[160px]" data-testid="select-project-filter">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Project" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Projects</SelectItem>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: project.color }} />
+                      {project.name}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Select value={priorityFilter} onValueChange={setPriorityFilter}>
             <SelectTrigger className="w-[140px]" data-testid="select-priority-filter">
               <Filter className="h-4 w-4 mr-2" />
@@ -563,25 +581,20 @@ export default function Tasks() {
         </div>
       </div>
 
-      {isLoading ? (
+      {isLoading || !statuses ? (
         view === "kanban" ? (
           <KanbanSkeleton count={3} />
         ) : (
           <ListSkeleton count={5} />
         )
       ) : view === "kanban" ? (
-        <div className="flex gap-6 overflow-x-auto pb-4">
-          {statusColumns.map((status) => (
-            <KanbanColumn
-              key={status.id}
-              status={status}
-              tasks={tasksByStatus[status.id]}
-              onEdit={handleEdit}
-              onStatusChange={handleStatusChange}
-              onDelete={handleDelete}
-            />
-          ))}
-        </div>
+        <EnhancedKanban
+          tasks={filteredTasks || []}
+          statuses={statuses}
+          onTaskMove={handleTaskMove}
+          onTaskEdit={handleEdit}
+          onTaskDelete={handleDelete}
+        />
       ) : (
         <div className="space-y-3">
           {filteredTasks?.length === 0 ? (
@@ -596,7 +609,12 @@ export default function Tasks() {
                 key={task.id}
                 task={task}
                 onEdit={handleEdit}
-                onStatusChange={handleStatusChange}
+                onStatusChange={(_, status) => {
+                  const targetStatus = statuses.find(s => s.name.toLowerCase() === status.toLowerCase());
+                  if (targetStatus) {
+                    handleTaskMove(task.id, targetStatus.id);
+                  }
+                }}
                 onDelete={handleDelete}
               />
             ))

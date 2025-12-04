@@ -38,11 +38,13 @@ import {
   Edit,
   Save,
 } from "lucide-react";
+import { showNotification } from "@/lib/pwa";
 import { useTheme } from "@/lib/theme-provider";
 import { useWorkspace } from "@/lib/workspace-context";
+import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Workspace, InsertWorkspace } from "@shared/schema";
+import type { Workspace, InsertWorkspace, UserSettings } from "@shared/schema";
 
 const iconOptions = [
   { value: "briefcase", label: "Briefcase", icon: Briefcase },
@@ -242,16 +244,22 @@ export default function Settings() {
     queryKey: ["/api/workspaces"],
   });
 
+  const [activeTab, setActiveTab] = useState("workspaces");
+
   const { data: userSettings, isLoading: settingsLoading } = useQuery<UserSettings>({
     queryKey: [`/api/user-settings?userId=${user?.id}`],
     enabled: !!user?.id,
   });
 
   const updateSettingsMutation = useMutation({
-    mutationFn: async (data: Partial<UserSettings>) => {
-      return apiRequest("PATCH", "/api/user-settings", { ...data, userId: user?.id });
+    mutationFn: async (updates: Partial<UserSettings>) => {
+      const res = await apiRequest("PATCH", "/api/user-settings", {
+        userId: user?.id,
+        ...updates
+      });
+      return await res.json() as UserSettings;
     },
-    onSuccess: (data) => {
+    onSuccess: (data: UserSettings) => {
       queryClient.invalidateQueries({ queryKey: [`/api/user-settings?userId=${user?.id}`] });
       toast({ title: "Settings updated" });
       // Apply theme immediately if changed
@@ -395,6 +403,29 @@ export default function Settings() {
               onCheckedChange={(checked) => updateSettingsMutation.mutate({ notificationsEnabled: checked })}
               data-testid="switch-notifications"
             />
+          </div>
+
+          <Separator />
+
+          <div>
+            <p className="font-medium mb-2">Test Notification</p>
+            <p className="text-sm text-muted-foreground mb-3">
+              Send a test notification to verify your settings
+            </p>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                await showNotification("Test Notification", {
+                  body: "If you can see this, notifications are working!",
+                  icon: "/favicon.png",
+                });
+                toast({ title: "Notification sent!" });
+              }}
+              data-testid="button-test-notification"
+            >
+              <Bell className="h-4 w-4 mr-2" />
+              Send Test Notification
+            </Button>
           </div>
 
           <Separator className="my-4" />
