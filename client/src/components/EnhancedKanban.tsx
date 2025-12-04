@@ -11,6 +11,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { useState } from "react";
+import { useTheme } from "@/lib/theme-provider";
+import { getColumnBackgroundColor, getColumnTextColor, getCardBackgroundOnColumn } from "@/lib/color-utils";
 
 interface EnhancedKanbanProps {
     tasks: Task[];
@@ -28,6 +30,8 @@ interface SortableTaskCardProps {
 }
 
 function SortableTaskCard({ task, statusColor, onEdit, onDelete }: SortableTaskCardProps) {
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: task.id,
     });
@@ -50,11 +54,12 @@ function SortableTaskCard({ task, statusColor, onEdit, onDelete }: SortableTaskC
             ref={setNodeRef}
             style={{
                 ...style,
-                borderLeft: `3px solid ${statusColor}`,
+                borderLeft: `4px solid ${statusColor}`,
+                backgroundColor: getCardBackgroundOnColumn(isDark),
             }}
             {...attributes}
             {...listeners}
-            className="mb-3 cursor-move hover:shadow-md transition-shadow"
+            className="mb-2 cursor-move hover:shadow-lg transition-all"
         >
             <CardHeader className="p-4">
                 <div className="flex items-start justify-between gap-2">

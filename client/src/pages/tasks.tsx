@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -387,6 +387,7 @@ export default function Tasks() {
   const [searchQuery, setSearchQuery] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [projectFilter, setProjectFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("none");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | undefined>();
 
@@ -454,6 +455,33 @@ export default function Tasks() {
     const matchesProject = projectFilter === 'all' || task.projectId === projectFilter;
     return matchesSearch && matchesPriority && matchesProject;
   });
+
+  // Sort tasks based on selection
+  const sortedTasks = useMemo(() => {
+    if (!filteredTasks || sortBy === 'none') return filteredTasks;
+
+    return [...filteredTasks].sort((a, b) => {
+      switch (sortBy) {
+        case 'dueDate':
+          if (!a.dueDate) return 1;
+          if (!b.dueDate) return -1;
+          return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+
+        case 'priority': {
+          const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
+          return (priorityOrder[a.priority as keyof typeof priorityOrder] || 999) -
+            (priorityOrder[b.priority as keyof typeof priorityOrder] || 999);
+        }
+
+        case 'created':
+          // Most recent first
+          return b.order - a.order;
+
+        default:
+          return 0;
+      }
+    });
+  }, [filteredTasks, sortBy]);
 
   if (!currentWorkspace) {
     return (
@@ -527,7 +555,7 @@ export default function Tasks() {
             data-testid="input-search-tasks"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {projects && projects.length > 0 && (
             <Select value={projectFilter} onValueChange={setProjectFilter}>
               <SelectTrigger className="w-[160px]" data-testid="select-project-filter">
@@ -547,6 +575,17 @@ export default function Tasks() {
               </SelectContent>
             </Select>
           )}
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="w-[140px]" data-testid="select-sort">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No Sorting</SelectItem>
+              <SelectItem value="dueDate">Due Date</SelectItem>
+              <SelectItem value="priority">Priority</SelectItem>
+              <SelectItem value="created">Created Date</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={priorityFilter} onValueChange={setPriorityFilter}>
             <SelectTrigger className="w-[140px]" data-testid="select-priority-filter">
               <Filter className="h-4 w-4 mr-2" />
