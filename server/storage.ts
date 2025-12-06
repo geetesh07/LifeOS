@@ -145,8 +145,10 @@ export interface IStorage {
   // Reminders
   getUpcomingEvents(minutes: number): Promise<Event[]>;
   getDueTasks(minutes: number): Promise<Task[]>;
+  getDueTasks2(minutes: number): Promise<Task[]>;
   markEventReminderSent(id: string): Promise<void>;
   markTaskReminderSent(id: string): Promise<void>;
+  markTaskReminder2Sent(id: string): Promise<void>;
 
   // Milestones
   getMilestones(projectId: string): Promise<Milestone[]>;
@@ -712,41 +714,6 @@ export class DatabaseStorage implements IStorage {
     return sub;
   }
 
-  // Reminders
-  async getUpcomingEvents(minutes: number): Promise<Event[]> {
-    const now = new Date();
-    const future = addMinutes(now, minutes);
-
-    return db.select().from(events)
-      .where(and(
-        gte(events.startTime, now),
-        lte(events.startTime, future),
-        eq(events.reminderSent, false)
-      ));
-  }
-
-  async getDueTasks(minutes: number): Promise<Task[]> {
-    const now = new Date();
-    const future = addMinutes(now, minutes);
-
-    return db.select().from(tasks)
-      .where(and(
-        gte(tasks.dueDate, now),
-        lte(tasks.dueDate, future),
-        eq(tasks.reminderSent, false),
-        // Only remind for incomplete tasks
-        sql`${tasks.completedAt} IS NULL`
-      ));
-  }
-
-  async markEventReminderSent(id: string): Promise<void> {
-    await db.update(events).set({ reminderSent: true }).where(eq(events.id, id));
-  }
-
-  async markTaskReminderSent(id: string): Promise<void> {
-    await db.update(tasks).set({ reminderSent: true }).where(eq(tasks.id, id));
-  }
-
   // Milestones
   async getMilestones(projectId: string): Promise<Milestone[]> {
     return db.select().from(milestones)
@@ -789,6 +756,79 @@ export class DatabaseStorage implements IStorage {
   async deleteProjectNote(id: string): Promise<boolean> {
     const result = await db.delete(projectNotes).where(eq(projectNotes.id, id)).returning();
     return result.length > 0;
+  }
+
+  // Reminder methods - get items due for notification
+  async getUpcomingEvents(defaultMinutes: number): Promise<Event[]> {
+    const now = new Date();
+    // Get events that have reminderMinutes set and haven't had reminder sent yet
+    // Event should start within (reminderMinutes) from now
+    const allEvents = await db.select().from(events)
+      .where(
+        and(
+          eq(events.reminderSent, false),
+          gte(events.startTime, now)
+        )
+      );
+
+    // Filter events where the reminder should fire now
+    return allEvents.filter(event => {
+      const reminderMins = event.reminderMinutes ?? defaultMinutes;
+      const reminderTime = addMinutes(now, reminderMins);
+      return event.startTime <= reminderTime;
+    });
+  }
+
+  async getDueTasks(defaultMinutes: number): Promise<Task[]> {
+    const now = new Date();
+    // Get tasks with START dates that haven't had reminder 1 sent
+    const allTasks = await db.select().from(tasks)
+      .where(
+        and(
+          eq(tasks.reminderSent, false),
+          gte(tasks.startDate, now) // Check startDate for reminder 1
+        )
+      );
+
+    // Filter tasks where the START time reminder should fire now
+    return allTasks.filter(task => {
+      if (!task.startDate || !task.reminderMinutes) return false;
+      const reminderMins = task.reminderMinutes;
+      const reminderTime = addMinutes(now, reminderMins);
+      return task.startDate <= reminderTime;
+    });
+  }
+
+  async getDueTasks2(defaultMinutes: number): Promise<Task[]> {
+    const now = new Date();
+    // Get tasks with due dates that haven't had reminder 2 sent
+    const allTasks = await db.select().from(tasks)
+      .where(
+        and(
+          eq(tasks.reminder2Sent, false),
+          gte(tasks.dueDate, now)
+        )
+      );
+
+    // Filter tasks where the second reminder should fire now
+    return allTasks.filter(task => {
+      if (!task.dueDate || !task.reminder2Minutes) return false;
+      const reminderMins = task.reminder2Minutes;
+      const reminderTime = addMinutes(now, reminderMins);
+      return task.dueDate <= reminderTime;
+    });
+  }
+
+  async markEventReminderSent(id: string): Promise<void> {
+    await db.update(events).set({ reminderSent: true }).where(eq(events.id, id));
+  }
+
+  async markTaskReminderSent(id: string): Promise<void> {
+    await db.update(tasks).set({ reminderSent: true }).where(eq(tasks.id, id));
+  }
+
+  async markTaskReminder2Sent(id: string): Promise<void> {
+    await db.update(tasks).set({ reminder2Sent: true }).where(eq(tasks.id, id));
   }
 }
 

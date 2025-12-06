@@ -162,7 +162,7 @@ function DroppableStatusColumn({ status, tasks, onEdit, onDelete }: DroppableSta
     return (
         <div
             key={status.id}
-            className="flex-shrink-0 w-80"
+            className="flex-shrink-0 w-72 sm:w-80"
         >
             <div
                 ref={setNodeRef}

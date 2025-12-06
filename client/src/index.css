@@ -256,7 +256,12 @@
   }
 
   /* High-tech heading styles */
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-semibold tracking-tight;
     letter-spacing: -0.02em;
   }
@@ -273,7 +278,7 @@
   .glass {
     @apply backdrop-blur-xl bg-white/10 border border-white/20;
   }
-  
+
   .glass-dark {
     @apply backdrop-blur-xl bg-black/20 border border-white/10;
   }
@@ -429,5 +434,92 @@
   .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
+  }
+}
+
+/* ========== MOBILE RESPONSIVE UTILITIES ========== */
+@layer utilities {
+
+  /* Mobile-friendly touch targets */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+
+  /* Hide on mobile, show on desktop */
+  .hide-mobile {
+    @apply hidden sm:block;
+  }
+
+  /* Show on mobile, hide on desktop */
+  .show-mobile {
+    @apply block sm:hidden;
+  }
+
+  /* Mobile-friendly cards */
+  .card-mobile {
+    @apply rounded-lg sm:rounded-xl;
+  }
+
+  /* Responsive text */
+  .text-responsive-lg {
+    @apply text-lg sm:text-xl md:text-2xl;
+  }
+
+  .text-responsive-md {
+    @apply text-base sm:text-lg md:text-xl;
+  }
+
+  .text-responsive-sm {
+    @apply text-sm sm:text-base;
+  }
+
+  /* Responsive gaps */
+  .gap-responsive {
+    @apply gap-2 sm:gap-3 md:gap-4;
+  }
+
+  /* Safe area padding for notched devices */
+  .safe-area-pb {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .safe-area-pt {
+    padding-top: max(0.5rem, env(safe-area-inset-top));
+  }
+}
+
+/* Mobile-specific overrides */
+@media (max-width: 640px) {
+
+  /* Larger touch targets on mobile */
+  button,
+  [role="button"],
+  .clickable {
+    min-height: 40px;
+  }
+
+  /* Reduce card padding on mobile */
+  .card-compact {
+    padding: 0.75rem !important;
+  }
+
+  /* Dialog improvements for mobile */
+  [role="dialog"] {
+    max-height: 90vh;
+    margin: 0.5rem;
+  }
+
+  /* Form input sizing for mobile */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+    /* Prevent iOS zoom on focus */
+  }
+
+  /* Kanban column scrolling on mobile */
+  .kanban-column {
+    min-width: 280px;
+    max-width: 320px;
   }
 }

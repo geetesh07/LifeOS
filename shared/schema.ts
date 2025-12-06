@@ -205,9 +205,15 @@ export const tasks = pgTable("tasks", {
   statusId: varchar("status_id").references(() => taskStatuses.id, { onDelete: "set null" }),
   priority: text("priority").notNull().default("medium"), // low, medium, high, urgent
   color: text("color"),
-  dueDate: timestamp("due_date"),
+  // Task timing
+  startDate: timestamp("start_date"), // When to start the task
+  dueDate: timestamp("due_date"), // Deadline / end time
+  // Reminder 1 - before START time
   reminderMinutes: integer("reminder_minutes"),
   reminderSent: boolean("reminder_sent").notNull().default(false),
+  // Reminder 2 - before END time (deadline)
+  reminder2Minutes: integer("reminder_2_minutes"),
+  reminder2Sent: boolean("reminder_2_sent").notNull().default(false),
   estimatedMinutes: integer("estimated_minutes"),
   completedAt: timestamp("completed_at"),
   order: integer("order").notNull().default(0),

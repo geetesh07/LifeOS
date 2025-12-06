@@ -68,6 +68,7 @@ export default function ProjectDetailPage() {
     const [milestoneDialogOpen, setMilestoneDialogOpen] = useState(false);
     const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
     const [noteContent, setNoteContent] = useState("");
+    const [editProjectOpen, setEditProjectOpen] = useState(false);
 
     // Queries
     const { data: project, isLoading } = useQuery<Project>({
@@ -108,6 +109,11 @@ export default function ProjectDetailPage() {
     const { data: projectNotes } = useQuery<ProjectNote[]>({
         queryKey: [`/api/project-notes?projectId=${projectId}`],
         enabled: !!projectId,
+    });
+
+    const { data: clients } = useQuery<Client[]>({
+        queryKey: [`/api/clients?workspaceId=${currentWorkspace?.id}`],
+        enabled: !!currentWorkspace,
     });
 
     // Mutations
@@ -152,6 +158,16 @@ export default function ProjectDetailPage() {
         mutationFn: async (id: string) => apiRequest("DELETE", `/api/project-notes/${id}`),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: [`/api/project-notes?projectId=${projectId}`] });
+        },
+    });
+
+    const updateProjectMutation = useMutation({
+        mutationFn: async (data: Partial<Project>) =>
+            apiRequest("PATCH", `/api/projects/${projectId}`, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}`] });
+            toast({ title: "Project updated!" });
+            setEditProjectOpen(false);
         },
     });
 
@@ -230,6 +246,10 @@ export default function ProjectDetailPage() {
                         </div>
                     </div>
                 </div>
+                <Button variant="outline" size="sm" onClick={() => setEditProjectOpen(true)}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit Project
+                </Button>
                 <Badge className={`${statusColors[project.status as keyof typeof statusColors]} text-white`}>
                     {project.status}
                 </Badge>
@@ -609,6 +629,15 @@ export default function ProjectDetailPage() {
                     }
                 }}
             />
+
+            {/* Edit Project Dialog */}
+            <EditProjectDialog
+                open={editProjectOpen}
+                onClose={() => setEditProjectOpen(false)}
+                project={project}
+                clients={clients || []}
+                onSave={(data) => updateProjectMutation.mutate(data)}
+            />
         </div>
     );
 }
@@ -634,7 +663,6 @@ function MilestoneDialog({
         milestone?.dueDate ? format(new Date(milestone.dueDate), "yyyy-MM-dd") : ""
     );
 
-    // Reset form when dialog opens or milestone changes
     useEffect(() => {
         if (open) {
             setTitle(milestone?.title || "");
@@ -689,6 +717,168 @@ function MilestoneDialog({
                     <Button variant="outline" onClick={onClose}>Cancel</Button>
                     <Button onClick={handleSubmit} disabled={!title.trim()}>
                         {milestone ? "Update" : "Create"}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function EditProjectDialog({
+    open,
+    onClose,
+    project,
+    clients,
+    onSave,
+}: {
+    open: boolean;
+    onClose: () => void;
+    project: Project;
+    clients: Client[];
+    onSave: (data: Partial<Project>) => void;
+}) {
+    const [name, setName] = useState(project.name);
+    const [description, setDescription] = useState(project.description || "");
+    const [budget, setBudget] = useState(project.budget?.toString() || "");
+    const [hourlyRate, setHourlyRate] = useState(project.hourlyRate?.toString() || "");
+    const [status, setStatus] = useState(project.status);
+    const [priority, setPriority] = useState(project.priority);
+    const [clientId, setClientId] = useState(project.clientId || "");
+    const [dueDate, setDueDate] = useState(
+        project.dueDate ? format(new Date(project.dueDate), "yyyy-MM-dd") : ""
+    );
+
+    useEffect(() => {
+        if (open) {
+            setName(project.name);
+            setDescription(project.description || "");
+            setBudget(project.budget?.toString() || "");
+            setHourlyRate(project.hourlyRate?.toString() || "");
+            setStatus(project.status);
+            setPriority(project.priority);
+            setClientId(project.clientId || "");
+            setDueDate(project.dueDate ? format(new Date(project.dueDate), "yyyy-MM-dd") : "");
+        }
+    }, [open, project]);
+
+    const handleSubmit = () => {
+        onSave({
+            name,
+            description: description || null,
+            budget: budget ? parseFloat(budget) : null,
+            hourlyRate: hourlyRate ? parseFloat(hourlyRate) : null,
+            status,
+            priority,
+            clientId: clientId || null,
+            dueDate: dueDate ? new Date(dueDate) : null,
+        });
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+            <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                    <DialogTitle>Edit Project</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                    <div>
+                        <label className="text-sm font-medium">Project Name</label>
+                        <Input
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Project name..."
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm font-medium">Description</label>
+                        <Textarea
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            placeholder="Project description..."
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-sm font-medium">Budget (₹)</label>
+                            <Input
+                                type="number"
+                                value={budget}
+                                onChange={(e) => setBudget(e.target.value)}
+                                placeholder="0.00"
+                                step="0.01"
+                                min="0"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium">Hourly Rate (₹)</label>
+                            <Input
+                                type="number"
+                                value={hourlyRate}
+                                onChange={(e) => setHourlyRate(e.target.value)}
+                                placeholder="0.00"
+                                step="0.01"
+                                min="0"
+                            />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-sm font-medium">Status</label>
+                            <Select value={status} onValueChange={setStatus}>
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="active">Active</SelectItem>
+                                    <SelectItem value="completed">Completed</SelectItem>
+                                    <SelectItem value="archived">Archived</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium">Priority</label>
+                            <Select value={priority} onValueChange={setPriority}>
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="low">Low</SelectItem>
+                                    <SelectItem value="medium">Medium</SelectItem>
+                                    <SelectItem value="high">High</SelectItem>
+                                    <SelectItem value="urgent">Urgent</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-sm font-medium">Client</label>
+                            <Select value={clientId || "_none"} onValueChange={(v) => setClientId(v === "_none" ? "" : v)}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select client" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="_none">No client</SelectItem>
+                                    {clients.map(c => (
+                                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium">Due Date</label>
+                            <Input
+                                type="date"
+                                value={dueDate}
+                                onChange={(e) => setDueDate(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={onClose}>Cancel</Button>
+                    <Button onClick={handleSubmit} disabled={!name.trim()}>
+                        Save Changes
                     </Button>
                 </DialogFooter>
             </DialogContent>

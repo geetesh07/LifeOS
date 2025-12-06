@@ -199,11 +199,30 @@ function TaskForm({
   const defaultStatus = statuses.find(s => s.isDefault);
   const [statusId, setStatusId] = useState(task?.statusId || defaultStatus?.id || "");
   const [projectId, setProjectId] = useState(task?.projectId || "");
+  const [startDate, setStartDate] = useState(
+    task?.startDate ? format(new Date(task.startDate), "yyyy-MM-dd'T'HH:mm") : ""
+  );
   const [dueDate, setDueDate] = useState(
-    task?.dueDate ? format(new Date(task.dueDate), "yyyy-MM-dd") : ""
+    task?.dueDate ? format(new Date(task.dueDate), "yyyy-MM-dd'T'HH:mm") : ""
   );
   const [estimatedMinutes, setEstimatedMinutes] = useState(
     task?.estimatedMinutes?.toString() || ""
+  );
+  const [reminderMinutes, setReminderMinutes] = useState(
+    task?.reminderMinutes?.toString() || ""
+  );
+  const [reminderPreset, setReminderPreset] = useState<string>(
+    task?.reminderMinutes ? (
+      [10, 30, 60, 1440].includes(task.reminderMinutes) ? task.reminderMinutes.toString() : "custom"
+    ) : "none"
+  );
+  const [reminder2Minutes, setReminder2Minutes] = useState(
+    task?.reminder2Minutes?.toString() || ""
+  );
+  const [reminder2Preset, setReminder2Preset] = useState<string>(
+    task?.reminder2Minutes ? (
+      [10, 30, 60, 1440].includes(task.reminder2Minutes) ? task.reminder2Minutes.toString() : "custom"
+    ) : "none"
   );
 
   const createMutation = useMutation({
@@ -243,8 +262,13 @@ function TaskForm({
       priority,
       statusId: statusId || null,
       projectId: projectId || null,
+      startDate: startDate ? new Date(startDate) : null,
       dueDate: dueDate ? new Date(dueDate) : null,
       estimatedMinutes: estimatedMinutes ? parseInt(estimatedMinutes) : null,
+      reminderMinutes: reminderPreset === "none" ? null : (reminderPreset === "custom" ? parseInt(reminderMinutes) : parseInt(reminderPreset)),
+      reminderSent: false,
+      reminder2Minutes: reminder2Preset === "none" ? null : (reminder2Preset === "custom" ? parseInt(reminder2Minutes) : parseInt(reminder2Preset)),
+      reminder2Sent: false,
     };
 
     if (task) {
@@ -322,17 +346,29 @@ function TaskForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <label className="text-sm font-medium">Due Date</label>
+          <label className="text-sm font-medium">📅 Start Date & Time</label>
           <Input
-            type="date"
+            type="datetime-local"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            data-testid="input-task-start-date"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">🏁 Deadline (End Date)</label>
+          <Input
+            type="datetime-local"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
             data-testid="input-task-due-date"
           />
         </div>
+      </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <label className="text-sm font-medium">Est. Minutes</label>
           <Input
@@ -367,6 +403,80 @@ function TaskForm({
           </Select>
         </div>
       )}
+
+      {/* Reminder 1 - Before START time */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium">🔔 Reminder before START time</label>
+        <Select
+          value={reminderPreset}
+          onValueChange={(val) => {
+            setReminderPreset(val);
+            if (val !== "custom" && val !== "none") {
+              setReminderMinutes(val);
+            }
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="No reminder" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No reminder</SelectItem>
+            <SelectItem value="1440">1 day before</SelectItem>
+            <SelectItem value="720">12 hours before</SelectItem>
+            <SelectItem value="360">6 hours before</SelectItem>
+            <SelectItem value="120">2 hours before</SelectItem>
+            <SelectItem value="60">1 hour before</SelectItem>
+            <SelectItem value="custom">Custom...</SelectItem>
+          </SelectContent>
+        </Select>
+        {reminderPreset === "custom" && (
+          <Input
+            type="number"
+            value={reminderMinutes}
+            onChange={(e) => setReminderMinutes(e.target.value)}
+            placeholder="Minutes before due date"
+            min="1"
+            className="mt-2"
+          />
+        )}
+      </div>
+
+      {/* Reminder 2 - Before DEADLINE */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium">⏰ Reminder before DEADLINE</label>
+        <Select
+          value={reminder2Preset}
+          onValueChange={(val) => {
+            setReminder2Preset(val);
+            if (val !== "custom" && val !== "none") {
+              setReminder2Minutes(val);
+            }
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="No reminder" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No reminder</SelectItem>
+            <SelectItem value="60">1 hour before</SelectItem>
+            <SelectItem value="30">30 minutes before</SelectItem>
+            <SelectItem value="15">15 minutes before</SelectItem>
+            <SelectItem value="10">10 minutes before</SelectItem>
+            <SelectItem value="5">5 minutes before</SelectItem>
+            <SelectItem value="custom">Custom...</SelectItem>
+          </SelectContent>
+        </Select>
+        {reminder2Preset === "custom" && (
+          <Input
+            type="number"
+            value={reminder2Minutes}
+            onChange={(e) => setReminder2Minutes(e.target.value)}
+            placeholder="Minutes before due date"
+            min="1"
+            className="mt-2"
+          />
+        )}
+      </div>
 
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>
@@ -504,8 +614,8 @@ export default function Tasks() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Tasks</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Tasks</h1>
+          <p className="text-muted-foreground text-sm sm:text-base mt-1">
             Manage your tasks and stay productive
           </p>
         </div>

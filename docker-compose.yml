@@ -1,29 +1,20 @@
 version: '3.8'
 
 services:
-  app:
+  lifeos:
     build: .
     ports:
       - "7777:7777"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/lifeos
       - NODE_ENV=production
       - PORT=7777
-    depends_on:
-      - db
-    restart: always
-
-  db:
-    image: postgres:15-alpine
-    ports:
-      - "5432:5432"
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=lifeos
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: always
-
-volumes:
-  postgres_data:
+      - DATABASE_URL=${DATABASE_URL}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7777/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

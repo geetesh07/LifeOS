@@ -150,10 +150,10 @@ export default function Finances() {
     }
 
     return (
-        <div className="p-8 space-y-6">
+        <div className="space-y-6">
             <div>
-                <h1 className="text-3xl font-bold">💰 Finances</h1>
-                <p className="text-muted-foreground">Track payments and expenses</p>
+                <h1 className="text-2xl sm:text-3xl font-bold">💰 Finances</h1>
+                <p className="text-muted-foreground text-sm sm:text-base">Track payments and expenses</p>
             </div>
 
             {/* Stats Cards */}
