@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -206,11 +207,13 @@ function ClientCard({
   projectCount,
   onEdit,
   onDelete,
+  onClick,
 }: {
   client: Client;
   projectCount: number;
   onEdit: (client: Client) => void;
   onDelete: (id: string) => void;
+  onClick: () => void;
 }) {
   const initials = client.name
     .split(" ")
@@ -220,7 +223,7 @@ function ClientCard({
     .slice(0, 2);
 
   return (
-    <Card className="group hover-elevate transition-all" data-testid={`client-card-${client.id}`}>
+    <Card className="group hover-elevate transition-all cursor-pointer" data-testid={`client-card-${client.id}`} onClick={onClick}>
       <CardContent className="pt-6">
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -246,6 +249,7 @@ function ClientCard({
                 variant="ghost"
                 size="icon"
                 className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                onClick={(e) => e.stopPropagation()}
               >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
@@ -306,6 +310,7 @@ function ClientCard({
 export default function Clients() {
   const { currentWorkspace } = useWorkspace();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | undefined>();
@@ -316,7 +321,7 @@ export default function Clients() {
   });
 
   const { data: projects } = useQuery<Project[]>({
-    queryKey: ["/api/projects", currentWorkspace?.id],
+    queryKey: [`/api/projects?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
@@ -437,6 +442,7 @@ export default function Clients() {
               projectCount={getProjectCount(client.id)}
               onEdit={handleEdit}
               onDelete={(id) => deleteMutation.mutate(id)}
+              onClick={() => setLocation(`/clients/${client.id}`)}
             />
           ))}
         </div>

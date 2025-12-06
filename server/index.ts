@@ -62,7 +62,14 @@ app.use((req, res, next) => {
   next();
 });
 
+import { setupAuth } from "./auth";
+import { setupScheduler } from "./services/scheduler";
+
+// ...
+
 (async () => {
+  setupAuth(app);
+  setupScheduler();
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

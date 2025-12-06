@@ -25,6 +25,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Workspace, InsertWorkspace } from "@shared/schema";
 
+import LandingPage from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
 import Tasks from "@/pages/tasks";
 import Calendar from "@/pages/calendar";
@@ -34,9 +35,12 @@ import Diary from "@/pages/diary";
 import Notes from "@/pages/notes";
 import Reports from "@/pages/reports";
 import Projects from "@/pages/projects";
+import ProjectDetailPage from "@/pages/project-detail";
 import Clients from "@/pages/clients";
+import ClientDetailPage from "@/pages/client-detail";
 import Finances from "@/pages/finances";
 import Settings from "@/pages/settings";
+import ProfilePage from "@/pages/profile";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import SignupPage from "@/pages/signup";
@@ -172,9 +176,10 @@ function WorkspaceModal({
 function Router() {
   return (
     <Switch>
+      <Route path="/" component={LandingPage} />
       <Route path="/login" component={LoginPage} />
       <Route path="/signup" component={SignupPage} />
-      <Route path="/">
+      <Route path="/dashboard">
         <ProtectedRoute>
           <Dashboard />
         </ProtectedRoute>
@@ -219,9 +224,19 @@ function Router() {
           <Projects />
         </ProtectedRoute>
       </Route>
+      <Route path="/projects/:id">
+        <ProtectedRoute>
+          <ProjectDetailPage />
+        </ProtectedRoute>
+      </Route>
       <Route path="/clients">
         <ProtectedRoute>
           <Clients />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/clients/:id">
+        <ProtectedRoute>
+          <ClientDetailPage />
         </ProtectedRoute>
       </Route>
       <Route path="/finances">
@@ -232,6 +247,11 @@ function Router() {
       <Route path="/settings">
         <ProtectedRoute>
           <Settings />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/profile">
+        <ProtectedRoute>
+          <ProfilePage />
         </ProtectedRoute>
       </Route>
       <Route component={NotFound} />
@@ -272,10 +292,10 @@ function AppContent() {
     );
   }
 
-  // Show login/signup pages without sidebar
-  const isAuthPage = location === '/login' || location === '/signup';
+  // Show public pages without sidebar
+  const isPublicPage = location === '/' || location === '/login' || location === '/signup';
 
-  if (!user || isAuthPage) {
+  if (!user || isPublicPage) {
     return <Router />;
   }
 

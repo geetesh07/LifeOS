@@ -1,7 +1,8 @@
 import {
   workspaces, clients, projects, tasks, timeEntries,
   habits, habitCompletions, diaryEntries, notes, events, userSettings,
-  taskStatuses, googleOAuthSettings, quickTodos,
+  taskStatuses, googleOAuthSettings, quickTodos, payments, expenses,
+  milestones, projectNotes,
   type Workspace, type InsertWorkspace,
   type Client, type InsertClient,
   type Project, type InsertProject,
@@ -17,10 +18,16 @@ import {
   type QuickTodo, type InsertQuickTodo,
   type GoogleOAuthSettings,
   googleCalendarTokens, type GoogleCalendarTokens, type InsertGoogleCalendarTokens,
+  users, type User, type InsertUser,
+  pushSubscriptions, type PushSubscription, type InsertPushSubscription,
+  type Payment, type InsertPayment,
+  type Expense, type InsertExpense,
+  type Milestone, type InsertMilestone,
+  type ProjectNote, type InsertProjectNote,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, asc, gte, lte, sql } from "drizzle-orm";
-import { startOfDay, endOfDay, subDays } from "date-fns";
+import { eq, and, desc, asc, gte, lte, sql, or } from "drizzle-orm";
+import { startOfDay, endOfDay, subDays, addMinutes } from "date-fns";
 
 export interface IStorage {
   // Workspaces
@@ -108,8 +115,50 @@ export interface IStorage {
 
   // Google Calendar Tokens
   getGoogleCalendarTokens(userId: string): Promise<GoogleCalendarTokens | undefined>;
+  getAllGoogleCalendarTokens(): Promise<GoogleCalendarTokens[]>;
   saveGoogleCalendarTokens(data: InsertGoogleCalendarTokens): Promise<GoogleCalendarTokens>;
   deleteGoogleCalendarTokens(userId: string): Promise<boolean>;
+
+  // Payments
+  getPayments(workspaceId: string): Promise<Payment[]>;
+  createPayment(data: InsertPayment): Promise<Payment>;
+  updatePayment(id: string, data: Partial<Payment>): Promise<Payment | undefined>;
+  deletePayment(id: string): Promise<boolean>;
+
+  // Expenses
+  getExpenses(workspaceId: string): Promise<Expense[]>;
+  createExpense(data: InsertExpense): Promise<Expense>;
+  updateExpense(id: string, data: Partial<Expense>): Promise<Expense | undefined>;
+  deleteExpense(id: string): Promise<boolean>;
+
+  // Users
+  getUser(id: string): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByUsernameOrEmail(identifier: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined>;
+
+  // Push Subscriptions
+  getPushSubscription(userId: string): Promise<PushSubscription | undefined>;
+  savePushSubscription(data: InsertPushSubscription): Promise<PushSubscription>;
+
+  // Reminders
+  getUpcomingEvents(minutes: number): Promise<Event[]>;
+  getDueTasks(minutes: number): Promise<Task[]>;
+  markEventReminderSent(id: string): Promise<void>;
+  markTaskReminderSent(id: string): Promise<void>;
+
+  // Milestones
+  getMilestones(projectId: string): Promise<Milestone[]>;
+  getMilestone(id: string): Promise<Milestone | undefined>;
+  createMilestone(data: InsertMilestone): Promise<Milestone>;
+  updateMilestone(id: string, data: Partial<Milestone>): Promise<Milestone | undefined>;
+  deleteMilestone(id: string): Promise<boolean>;
+
+  // Project Notes
+  getProjectNotes(projectId: string): Promise<ProjectNote[]>;
+  createProjectNote(data: InsertProjectNote): Promise<ProjectNote>;
+  deleteProjectNote(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -550,6 +599,10 @@ export class DatabaseStorage implements IStorage {
     return tokens;
   }
 
+  async getAllGoogleCalendarTokens(): Promise<GoogleCalendarTokens[]> {
+    return db.select().from(googleCalendarTokens);
+  }
+
   async saveGoogleCalendarTokens(data: InsertGoogleCalendarTokens): Promise<GoogleCalendarTokens> {
     const existing = await this.getGoogleCalendarTokens(data.userId);
     if (existing) {
@@ -572,6 +625,169 @@ export class DatabaseStorage implements IStorage {
 
   async deleteGoogleCalendarTokens(userId: string): Promise<boolean> {
     const result = await db.delete(googleCalendarTokens).where(eq(googleCalendarTokens.userId, userId)).returning();
+    return result.length > 0;
+  }
+
+  // Users
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async getUserByUsernameOrEmail(identifier: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(
+      or(
+        eq(users.username, identifier),
+        eq(users.email, identifier)
+      )
+    );
+    return user;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  async updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined> {
+    const [user] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
+    return user;
+  }
+
+  // Payments
+  async getPayments(workspaceId: string): Promise<Payment[]> {
+    return db.select().from(payments).where(eq(payments.workspaceId, workspaceId)).orderBy(desc(payments.paymentDate));
+  }
+
+  async createPayment(data: InsertPayment): Promise<Payment> {
+    const [payment] = await db.insert(payments).values(data).returning();
+    return payment;
+  }
+
+  async updatePayment(id: string, data: Partial<Payment>): Promise<Payment | undefined> {
+    const [payment] = await db.update(payments).set(data).where(eq(payments.id, id)).returning();
+    return payment;
+  }
+
+  // Expenses
+  async getExpenses(workspaceId: string): Promise<Expense[]> {
+    return db.select().from(expenses).where(eq(expenses.workspaceId, workspaceId)).orderBy(desc(expenses.expenseDate));
+  }
+
+  async createExpense(data: InsertExpense): Promise<Expense> {
+    const [expense] = await db.insert(expenses).values(data).returning();
+    return expense;
+  }
+
+  async updateExpense(id: string, data: Partial<Expense>): Promise<Expense | undefined> {
+    const [expense] = await db.update(expenses).set(data).where(eq(expenses.id, id)).returning();
+    return expense;
+  }
+
+  async deletePayment(id: string): Promise<boolean> {
+    const result = await db.delete(payments).where(eq(payments.id, id));
+    return true;
+  }
+
+  async deleteExpense(id: string): Promise<boolean> {
+    const result = await db.delete(expenses).where(eq(expenses.id, id));
+    return true;
+  }
+
+  // Push Subscriptions
+  async getPushSubscription(userId: string): Promise<PushSubscription | undefined> {
+    const [sub] = await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+    return sub;
+  }
+
+  async savePushSubscription(data: InsertPushSubscription): Promise<PushSubscription> {
+    // Delete existing for simplicity (one device per user for now, or handle multiple)
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, data.userId));
+    const [sub] = await db.insert(pushSubscriptions).values(data).returning();
+    return sub;
+  }
+
+  // Reminders
+  async getUpcomingEvents(minutes: number): Promise<Event[]> {
+    const now = new Date();
+    const future = addMinutes(now, minutes);
+
+    return db.select().from(events)
+      .where(and(
+        gte(events.startTime, now),
+        lte(events.startTime, future),
+        eq(events.reminderSent, false)
+      ));
+  }
+
+  async getDueTasks(minutes: number): Promise<Task[]> {
+    const now = new Date();
+    const future = addMinutes(now, minutes);
+
+    return db.select().from(tasks)
+      .where(and(
+        gte(tasks.dueDate, now),
+        lte(tasks.dueDate, future),
+        eq(tasks.reminderSent, false),
+        // Only remind for incomplete tasks
+        sql`${tasks.completedAt} IS NULL`
+      ));
+  }
+
+  async markEventReminderSent(id: string): Promise<void> {
+    await db.update(events).set({ reminderSent: true }).where(eq(events.id, id));
+  }
+
+  async markTaskReminderSent(id: string): Promise<void> {
+    await db.update(tasks).set({ reminderSent: true }).where(eq(tasks.id, id));
+  }
+
+  // Milestones
+  async getMilestones(projectId: string): Promise<Milestone[]> {
+    return db.select().from(milestones)
+      .where(eq(milestones.projectId, projectId))
+      .orderBy(asc(milestones.order));
+  }
+
+  async getMilestone(id: string): Promise<Milestone | undefined> {
+    const [milestone] = await db.select().from(milestones).where(eq(milestones.id, id));
+    return milestone;
+  }
+
+  async createMilestone(data: InsertMilestone): Promise<Milestone> {
+    const [milestone] = await db.insert(milestones).values(data).returning();
+    return milestone;
+  }
+
+  async updateMilestone(id: string, data: Partial<Milestone>): Promise<Milestone | undefined> {
+    const [milestone] = await db.update(milestones).set(data).where(eq(milestones.id, id)).returning();
+    return milestone;
+  }
+
+  async deleteMilestone(id: string): Promise<boolean> {
+    const result = await db.delete(milestones).where(eq(milestones.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Project Notes
+  async getProjectNotes(projectId: string): Promise<ProjectNote[]> {
+    return db.select().from(projectNotes)
+      .where(eq(projectNotes.projectId, projectId))
+      .orderBy(desc(projectNotes.createdAt));
+  }
+
+  async createProjectNote(data: InsertProjectNote): Promise<ProjectNote> {
+    const [note] = await db.insert(projectNotes).values(data).returning();
+    return note;
+  }
+
+  async deleteProjectNote(id: string): Promise<boolean> {
+    const result = await db.delete(projectNotes).where(eq(projectNotes.id, id)).returning();
     return result.length > 0;
   }
 }

@@ -404,27 +404,25 @@ export default function Calendar() {
   });
 
   const { user } = useAuth();
+  const [googleSyncEnabled, setGoogleSyncEnabled] = useState(false);
+
   const { data: googleEvents, isLoading: googleLoading, refetch: refetchGoogle } = useQuery<any[]>({
     queryKey: ["/api/google-calendar/events", user?.id, currentWorkspace?.id],
     queryFn: async () => {
       const userId = user?.id;
       const workspaceId = currentWorkspace?.id;
 
-      console.log("[Calendar] Fetching Google events", { userId, workspaceId });
-
       if (!userId || !workspaceId) {
-        console.log("[Calendar] Missing userId or workspaceId, skipping fetch");
         return [];
       }
 
       const response = await fetch(`/api/google-calendar/events?userId=${userId}&workspaceId=${workspaceId}`);
       if (!response.ok) {
-        console.error("[Calendar] Failed to fetch Google events", await response.text());
         return [];
       }
       return await response.json();
     },
-    enabled: !!user?.id && !!currentWorkspace?.id,
+    enabled: googleSyncEnabled && !!user?.id && !!currentWorkspace?.id,
   });
 
   const syncMutation = useMutation({
@@ -432,11 +430,12 @@ export default function Calendar() {
       return apiRequest("POST", "/api/google-calendar/sync");
     },
     onSuccess: () => {
+      setGoogleSyncEnabled(true);
       refetchGoogle();
       toast({ title: "Calendar synced successfully" });
     },
     onError: () => {
-      toast({ title: "Failed to sync calendar", variant: "destructive" });
+      toast({ title: "Failed to sync calendar. Make sure Google Calendar is connected in Settings.", variant: "destructive" });
     },
   });
 

@@ -59,7 +59,7 @@ function StatsCards({
   timeEntries: TimeEntry[] | undefined;
 }) {
   const todayTasks = tasks?.filter(t =>
-    t.dueDate && isToday(new Date(t.dueDate)) && t.status !== "done"
+    t.dueDate && isToday(new Date(t.dueDate)) && !t.completedAt
   ).length || 0;
 
   const completedToday = tasks?.filter(t =>
@@ -130,7 +130,7 @@ function UpcomingTasks({ tasks }: { tasks: Task[] | undefined }) {
   const { workspaces } = useWorkspace();
 
   const upcomingTasks = tasks
-    ?.filter(t => t.status !== "done" && t.dueDate)
+    ?.filter(t => !t.completedAt && t.dueDate)
     .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime())
     .slice(0, 5);
 

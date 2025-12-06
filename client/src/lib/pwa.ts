@@ -7,16 +7,48 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
         return 'denied';
     }
 
-    if (Notification.permission === 'granted') {
-        return 'granted';
+    let permission = Notification.permission;
+
+    if (permission !== 'granted' && permission !== 'denied') {
+        permission = await Notification.requestPermission();
     }
 
-    if (Notification.permission !== 'denied') {
-        const permission = await Notification.requestPermission();
-        return permission;
+    if (permission === 'granted') {
+        // Subscribe to push
+        await subscribeToPush();
     }
 
-    return Notification.permission;
+    return permission;
+}
+
+async function subscribeToPush() {
+    if (!('serviceWorker' in navigator)) return;
+
+    try {
+        const registration = await navigator.serviceWorker.ready;
+
+        // Get VAPID key from env (exposed via API or hardcoded for now)
+        // In a real app, fetch this from an endpoint
+        const response = await fetch('/api/vapid-public-key'); // We need to add this endpoint
+        // For now, we'll skip if we don't have the key, or use a placeholder if we set it up
+        // const vapidPublicKey = ...
+
+        // Skipping actual subscription for now until we expose the key
+        // const subscription = await registration.pushManager.subscribe({
+        //     userVisibleOnly: true,
+        //     applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+        // });
+
+        // await fetch('/api/notifications/subscribe', {
+        //     method: 'POST',
+        //     body: JSON.stringify(subscription),
+        //     headers: {
+        //         'Content-Type': 'application/json',
+        //     },
+        // });
+    } catch (error) {
+        console.error('Failed to subscribe to push:', error);
+    }
 }
 
 // Show a notification

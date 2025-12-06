@@ -1,10 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* LIGHT MODE - Honey & Vibrant */
+/* LIGHT MODE - Clean & Modern */
 :root {
   --button-outline: rgba(0, 0, 0, .08);
   --badge-outline: rgba(0, 0, 0, .04);
@@ -80,15 +80,14 @@
   --chart-5: 14 90% 60%;
   /* Coral */
 
-  /* Fonts */
-  --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* High-tech Fonts */
+  --font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-serif: 'Georgia', serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
-  --radius: 1rem;
-  /* Softer, larger radius */
+  --radius: 0.875rem;
 
-  /* Soft Shadows */
+  /* Soft Shadows with glow */
   --shadow-2xs: 0px 1px 2px 0px rgba(20, 10, 0, 0.03);
   --shadow-xs: 0px 1px 3px 0px rgba(20, 10, 0, 0.06);
   --shadow-sm: 0px 2px 4px -1px rgba(20, 10, 0, 0.08);
@@ -97,6 +96,10 @@
   --shadow-lg: 0px 12px 24px -6px rgba(20, 10, 0, 0.14);
   --shadow-xl: 0px 24px 40px -10px rgba(20, 10, 0, 0.16);
   --shadow-2xl: 0px 30px 60px -15px rgba(20, 10, 0, 0.20);
+
+  /* Glow effect colors */
+  --glow-primary: 0 0 20px rgba(245, 158, 11, 0.3);
+  --glow-accent: 0 0 20px rgba(20, 184, 166, 0.3);
 
   --tracking-normal: 0em;
   --spacing: 0.25rem;
@@ -124,7 +127,7 @@
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
-/* DARK MODE - Deep Warmth */
+/* DARK MODE - Sleek & Futuristic */
 .dark {
   --button-outline: rgba(255, 255, 255, .12);
   --badge-outline: rgba(255, 255, 255, .06);
@@ -132,54 +135,54 @@
   --elevate-1: rgba(245, 158, 11, .10);
   --elevate-2: rgba(245, 158, 11, .20);
 
-  /* Main colors - Deep warm gray */
-  --background: 30 15% 8%;
-  /* Deep warm black */
-  --foreground: 35 20% 94%;
-  /* Warm white */
-  --border: 30 10% 18%;
+  /* Main colors - Deep space black */
+  --background: 240 10% 4%;
+  /* Near black with slight blue */
+  --foreground: 0 0% 95%;
+  /* Bright white */
+  --border: 240 5% 15%;
 
-  /* Card colors */
-  --card: 30 12% 11%;
-  --card-foreground: 35 20% 94%;
-  --card-border: 30 10% 16%;
+  /* Card colors - Elevated surfaces */
+  --card: 240 8% 8%;
+  --card-foreground: 0 0% 95%;
+  --card-border: 240 5% 14%;
 
   /* Sidebar */
-  --sidebar: 30 12% 10%;
-  --sidebar-foreground: 35 20% 94%;
-  --sidebar-border: 30 10% 16%;
+  --sidebar: 240 8% 6%;
+  --sidebar-foreground: 0 0% 95%;
+  --sidebar-border: 240 5% 12%;
   --sidebar-primary: 35 95% 55%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 35 40% 16%;
+  --sidebar-accent: 35 40% 12%;
   --sidebar-accent-foreground: 35 95% 65%;
   --sidebar-ring: 35 95% 55%;
 
   /* Popover */
-  --popover: 30 15% 10%;
-  --popover-foreground: 35 20% 94%;
-  --popover-border: 30 10% 16%;
+  --popover: 240 10% 8%;
+  --popover-foreground: 0 0% 95%;
+  --popover-border: 240 5% 15%;
 
   /* Primary */
   --primary: 35 95% 55%;
   --primary-foreground: 0 0% 100%;
 
   /* Secondary */
-  --secondary: 30 30% 16%;
-  --secondary-foreground: 35 20% 94%;
+  --secondary: 240 5% 14%;
+  --secondary-foreground: 0 0% 95%;
 
   /* Muted */
-  --muted: 30 10% 16%;
-  --muted-foreground: 30 5% 60%;
+  --muted: 240 5% 14%;
+  --muted-foreground: 240 5% 55%;
 
   /* Accent */
-  --accent: 170 50% 16%;
+  --accent: 170 50% 12%;
   --accent-foreground: 170 80% 75%;
 
   /* Destructive */
   --destructive: 0 70% 55%;
   --destructive-foreground: 0 0% 100%;
 
-  --input: 30 10% 18%;
+  --input: 240 5% 15%;
   --ring: 35 95% 55%;
 
   /* Chart colors */
@@ -194,21 +197,26 @@
   --chart-5: 14 85% 60%;
   /* Coral */
 
-  /* Fonts */
-  --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* High-tech Fonts */
+  --font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-serif: 'Georgia', serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
-  --radius: 1rem;
+  --radius: 0.875rem;
 
-  --shadow-2xs: 0px 1px 2px 0px rgba(0, 0, 0, 0.3);
-  --shadow-xs: 0px 1px 3px 0px rgba(0, 0, 0, 0.4);
-  --shadow-sm: 0px 2px 4px -1px rgba(0, 0, 0, 0.5);
-  --shadow: 0px 4px 6px -1px rgba(0, 0, 0, 0.6);
-  --shadow-md: 0px 6px 12px -2px rgba(0, 0, 0, 0.7);
-  --shadow-lg: 0px 10px 20px -4px rgba(0, 0, 0, 0.8);
+  /* Deep shadows for 3D effect */
+  --shadow-2xs: 0px 1px 2px 0px rgba(0, 0, 0, 0.4);
+  --shadow-xs: 0px 1px 3px 0px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0px 2px 4px -1px rgba(0, 0, 0, 0.6);
+  --shadow: 0px 4px 6px -1px rgba(0, 0, 0, 0.7);
+  --shadow-md: 0px 6px 12px -2px rgba(0, 0, 0, 0.8);
+  --shadow-lg: 0px 10px 20px -4px rgba(0, 0, 0, 0.85);
   --shadow-xl: 0px 20px 30px -8px rgba(0, 0, 0, 0.9);
   --shadow-2xl: 0px 25px 50px -12px rgba(0, 0, 0, 0.95);
+
+  /* Glow effect colors for dark mode */
+  --glow-primary: 0 0 30px rgba(245, 158, 11, 0.4);
+  --glow-accent: 0 0 30px rgba(20, 184, 166, 0.4);
 
   --tracking-normal: 0em;
   --spacing: 0.25rem;
@@ -243,6 +251,72 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    font-feature-settings: "ss01", "ss02", "cv01";
+    letter-spacing: -0.01em;
+  }
+
+  /* High-tech heading styles */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+    letter-spacing: -0.02em;
+  }
+
+  /* Monospace for numbers */
+  .tabular-nums {
+    font-family: var(--font-mono);
+    font-feature-settings: "tnum";
+  }
+}
+
+/* Glassmorphism utility classes */
+@layer components {
+  .glass {
+    @apply backdrop-blur-xl bg-white/10 border border-white/20;
+  }
+  
+  .glass-dark {
+    @apply backdrop-blur-xl bg-black/20 border border-white/10;
+  }
+
+  .glow-primary {
+    box-shadow: var(--glow-primary);
+  }
+
+  .glow-accent {
+    box-shadow: var(--glow-accent);
+  }
+
+  /* Gradient text for headers */
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600;
+  }
+
+  /* Modern card with depth */
+  .card-3d {
+    @apply relative transition-all duration-300;
+    transform-style: preserve-3d;
+  }
+
+  .card-3d:hover {
+    transform: translateY(-4px) rotateX(2deg);
+  }
+
+  /* Animated gradient border */
+  .gradient-border {
+    position: relative;
+  }
+
+  .gradient-border::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
   }
 }
 

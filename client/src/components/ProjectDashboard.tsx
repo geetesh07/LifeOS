@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import type { Task, Project, TimeEntry } from "@shared/schema";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
-import { Clock, DollarSign, CheckCircle2, AlertCircle } from "lucide-react";
+import { Clock, IndianRupee, CheckCircle2, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatDateShort } from "@/lib/dateUtils";
 
@@ -88,7 +88,7 @@ export function ProjectDashboard({ project, tasks, timeEntries }: ProjectDashboa
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Estimated Cost</CardTitle>
-                        <DollarSign className="h-4 w-4 text-muted-foreground" />
+                        <IndianRupee className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">₹{estimatedCost.toFixed(0)}</div>

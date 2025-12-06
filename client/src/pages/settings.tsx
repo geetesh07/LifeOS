@@ -502,7 +502,7 @@ export default function Settings() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground mt-1">
-          Customize your LifeFlow experience
+          Customize your LifeOS experience
         </p>
       </div>
 
@@ -513,7 +513,7 @@ export default function Settings() {
             Appearance
           </CardTitle>
           <CardDescription>
-            Customize how LifeFlow looks on your device
+            Customize how LifeOS looks on your device
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -591,11 +591,34 @@ export default function Settings() {
                 Receive reminders for tasks, events, and habits
               </p>
             </div>
-            <Switch
-              checked={userSettings?.notificationsEnabled ?? true}
-              onCheckedChange={(checked) => updateSettingsMutation.mutate({ notificationsEnabled: checked })}
-              data-testid="switch-notifications"
-            />
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (!("Notification" in window)) {
+                    toast({ title: "Notifications not supported", variant: "destructive" });
+                    return;
+                  }
+                  Notification.requestPermission().then((permission) => {
+                    if (permission === "granted") {
+                      toast({ title: "Notifications enabled!" });
+                      updateSettingsMutation.mutate({ notificationsEnabled: true });
+                    } else {
+                      toast({ title: "Permission denied", variant: "destructive" });
+                      updateSettingsMutation.mutate({ notificationsEnabled: false });
+                    }
+                  });
+                }}
+              >
+                Request Permission
+              </Button>
+              <Switch
+                checked={userSettings?.notificationsEnabled ?? true}
+                onCheckedChange={(checked) => updateSettingsMutation.mutate({ notificationsEnabled: checked })}
+                data-testid="switch-notifications"
+              />
+            </div>
           </div>
 
           <Separator />

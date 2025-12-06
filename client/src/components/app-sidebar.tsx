@@ -11,7 +11,7 @@ import {
   Settings,
   Users,
   Folder,
-  DollarSign,
+  IndianRupee,
 } from "lucide-react";
 import {
   Sidebar,
@@ -35,7 +35,7 @@ import { Button } from "./ui/button";
 const mainNavItems = [
   {
     title: "Dashboard",
-    url: "/",
+    url: "/dashboard",
     icon: LayoutDashboard,
   },
   {
@@ -87,7 +87,7 @@ const manageItems = [
   {
     title: "Finances",
     url: "/finances",
-    icon: DollarSign,
+    icon: IndianRupee,
   },
   {
     title: "Reports",
@@ -97,11 +97,11 @@ const manageItems = [
 ];
 
 function LogoutButton() {
-  const { user, signOut } = useAuth();
+  const { user, logout } = useAuth();
   const [, setLocation] = useLocation();
 
   const handleLogout = async () => {
-    await signOut();
+    await logout();
     setLocation('/login');
   };
 
@@ -141,9 +141,9 @@ export function AppSidebar({ onAddWorkspace }: AppSidebarProps) {
         <div className="px-2 py-3">
           <div className="flex items-center gap-2 px-2 mb-4">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">LF</span>
+              <span className="text-primary-foreground font-bold text-sm">LO</span>
             </div>
-            <span className="font-semibold text-lg">LifeFlow</span>
+            <span className="font-semibold text-lg">LifeOS</span>
           </div>
           <WorkspaceSwitcher onAddWorkspace={onAddWorkspace} />
         </div>
@@ -226,6 +226,18 @@ export function AppSidebar({ onAddWorkspace }: AppSidebarProps) {
 
       <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={location === "/profile"}
+              tooltip="My Profile"
+            >
+              <Link href="/profile" data-testid="nav-profile">
+                <Users className="h-4 w-4" />
+                <span>My Profile</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild

@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '../lib/auth-context';
 
@@ -9,6 +9,12 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
     const { user, loading } = useAuth();
     const [, setLocation] = useLocation();
+
+    useEffect(() => {
+        if (!loading && !user) {
+            setLocation('/login');
+        }
+    }, [user, loading, setLocation]);
 
     if (loading) {
         return (
@@ -22,7 +28,6 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     }
 
     if (!user) {
-        setLocation('/login');
         return null;
     }
 

@@ -1,47 +1,69 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from './supabase';
+import { User as SelectUser, InsertUser } from '@shared/schema';
+import { apiRequest, queryClient } from './queryClient';
+import { useToast } from '@/hooks/use-toast';
+
+type User = SelectUser;
 
 interface AuthContextType {
     user: User | null;
-    session: Session | null;
     loading: boolean;
-    signOut: () => Promise<void>;
+    login: (credentials: Pick<InsertUser, 'username' | 'password'>) => Promise<void>;
+    register: (credentials: InsertUser) => Promise<void>;
+    logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
-    const [session, setSession] = useState<Session | null>(null);
     const [loading, setLoading] = useState(true);
+    const { toast } = useToast();
 
     useEffect(() => {
-        // Get initial session
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-            setUser(session?.user ?? null);
-            setLoading(false);
-        });
+        // Check for active session
+        const checkUser = async () => {
+            try {
+                const res = await fetch('/api/user');
+                if (res.ok) {
+                    const user = await res.json();
+                    setUser(user);
+                } else {
+                    setUser(null);
+                }
+            } catch (error) {
+                setUser(null);
+            } finally {
+                setLoading(false);
+            }
+        };
 
-        // Listen for auth changes
-        const {
-            data: { subscription },
-        } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
-            setUser(session?.user ?? null);
-            setLoading(false);
-        });
-
-        return () => subscription.unsubscribe();
+        checkUser();
     }, []);
 
-    const signOut = async () => {
-        await supabase.auth.signOut();
+    const login = async (credentials: Pick<InsertUser, 'username' | 'password'>) => {
+        const res = await apiRequest('POST', '/api/login', credentials);
+        const user = await res.json();
+        setUser(user);
+        toast({ title: "Welcome back!" });
+    };
+
+    const register = async (credentials: InsertUser) => {
+        const res = await apiRequest('POST', '/api/register', credentials);
+        const user = await res.json();
+        setUser(user);
+        toast({ title: "Account created successfully" });
+    };
+
+    const logout = async () => {
+        await apiRequest('POST', '/api/logout');
+        setUser(null);
+        queryClient.clear();
+        toast({ title: "Logged out successfully" });
     };
 
     return (
-        <AuthContext.Provider value={{ user, session, loading, signOut }}>
+        <AuthContext.Provider value={{ user, loading, login, register, logout }}>
             {children}
         </AuthContext.Provider>
     );

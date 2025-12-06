@@ -41,7 +41,7 @@ export function lightenColor(hex: string, amount: number = 0.8): string {
 }
 
 /**
- * Darken and saturate a color for dark mode (vibrant effect)
+ * Darken and desaturate a color for dark mode columns (subtle, not overwhelming)
  */
 export function adjustColorForDark(hex: string): string {
     const rgb = hexToRgb(hex);
@@ -49,8 +49,9 @@ export function adjustColorForDark(hex: string): string {
 
     let { r, g, b } = rgb;
 
-    // Reduce brightness slightly for dark backgrounds
-    const factor = 0.85;
+    // Significantly reduce brightness and saturation for dark mode
+    // This creates a subtle tint rather than a vivid background
+    const factor = 0.3; // Much darker
     r = Math.round(r * factor);
     g = Math.round(g * factor);
     b = Math.round(b * factor);
@@ -63,7 +64,7 @@ export function adjustColorForDark(hex: string): string {
  */
 export function getColumnBackgroundColor(statusColor: string, isDark: boolean): string {
     if (isDark) {
-        // Use adjusted color for dark mode - vibrant but not too bright
+        // Use very muted color for dark mode - subtle tint that doesn't clash with cards
         return adjustColorForDark(statusColor);
     } else {
         // Use lightened color for light mode - soft pastels

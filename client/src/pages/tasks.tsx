@@ -56,7 +56,7 @@ import {
 import { useWorkspace } from "@/lib/workspace-context";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { format, isToday, isTomorrow, isPast } from "date-fns";
+import { format, isToday, isTomorrow, isPast, differenceInHours } from "date-fns";
 import type { Task, Project, InsertTask, TaskStatus } from "@shared/schema";
 import { EnhancedKanban } from "@/components/EnhancedKanban";
 import { StatusManager } from "@/components/StatusManager";
@@ -448,12 +448,21 @@ export default function Tasks() {
     setEditingTask(undefined);
   };
 
+  // Get done statuses for filtering
+  const doneStatusIds = statuses?.filter(s => s.isDoneState).map(s => s.id) || [];
+
   const filteredTasks = tasks?.filter(task => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.description?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesPriority = priorityFilter === 'all' || task.priority === priorityFilter;
     const matchesProject = projectFilter === 'all' || task.projectId === projectFilter;
-    return matchesSearch && matchesPriority && matchesProject;
+
+    // Hide completed tasks older than 24 hours from main Tasks page
+    const isDone = task.statusId && doneStatusIds.includes(task.statusId);
+    const completedRecently = !task.completedAt || differenceInHours(new Date(), new Date(task.completedAt)) < 24;
+    const showTask = !isDone || completedRecently;
+
+    return matchesSearch && matchesPriority && matchesProject && showTask;
   });
 
   // Sort tasks based on selection

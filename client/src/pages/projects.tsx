@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,7 +40,7 @@ import {
   Trash2,
   Clock,
   CheckSquare,
-  DollarSign,
+  IndianRupee,
   Calendar,
   Search,
   Archive,
@@ -48,7 +49,7 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format, formatDistanceToNow } from "date-fns";
-import type { Project, TimeEntry, Client, InsertProject, Task } from "@shared/schema";
+import type { Project, TimeEntry, Client, InsertProject, Task, Payment } from "@shared/schema";
 
 const colorOptions = [
   { value: "#3B82F6", label: "Blue" },
@@ -283,15 +284,19 @@ function ProjectCard({
   client,
   tasks,
   timeEntries,
+  payments,
   onEdit,
   onDelete,
+  onClick,
 }: {
   project: Project;
   client?: Client;
   tasks: Task[];
   timeEntries: TimeEntry[];
+  payments: Payment[];
   onEdit: (project: Project) => void;
   onDelete: (id: string) => void;
+  onClick: () => void;
 }) {
   const projectTasks = tasks.filter(t => t.projectId === project.id);
   const completedTasks = projectTasks.filter(t => t.status === "done").length;
@@ -302,12 +307,19 @@ function ProjectCard({
     .filter(e => e.projectId === project.id)
     .reduce((acc, e) => acc + (e.durationMinutes || 0), 0);
 
-  const earnings = project.hourlyRate ? (projectTime / 60) * project.hourlyRate : 0;
+  // Calculate actual payments received for this project
+  const paymentsReceived = payments
+    .filter(p => p.projectId === project.id)
+    .reduce((acc, p) => acc + p.amount, 0);
 
   const statusOption = statusOptions.find(s => s.value === project.status);
 
   return (
-    <Card className="group hover-elevate transition-all" data-testid={`project-card-${project.id}`}>
+    <Card
+      className="group hover-elevate transition-all cursor-pointer"
+      data-testid={`project-card-${project.id}`}
+      onClick={onClick}
+    >
       <CardContent className="pt-6">
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -331,6 +343,7 @@ function ProjectCard({
                 variant="ghost"
                 size="icon"
                 className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                onClick={(e) => e.stopPropagation()}
               >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
@@ -360,23 +373,32 @@ function ProjectCard({
 
         <div className="space-y-3 mb-4">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Progress</span>
-            <span className="font-medium">{completedTasks}/{totalTasks} tasks</span>
+            <span className="text-muted-foreground">Tasks</span>
+            <span className="font-medium">{completedTasks}/{totalTasks}</span>
           </div>
           <Progress value={progress} className="h-2" />
+
+          {project.budget && (
+            <>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Payments</span>
+                <span className="font-medium">
+                  {Math.round((paymentsReceived / project.budget) * 100)}% • ₹{project.budget} budget
+                </span>
+              </div>
+              <Progress
+                value={Math.min((paymentsReceived / project.budget) * 100, 100)}
+                className="h-2"
+              />
+            </>
+          )}
         </div>
 
-        <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="flex flex-wrap gap-4 text-sm">
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-muted-foreground" />
             <span>{formatDuration(projectTime)}</span>
           </div>
-          {project.budget && (
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-              <span>${earnings.toFixed(0)} / ${project.budget}</span>
-            </div>
-          )}
           {project.dueDate && (
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -402,6 +424,7 @@ function ProjectCard({
 export default function Projects() {
   const { currentWorkspace } = useWorkspace();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -424,6 +447,11 @@ export default function Projects() {
 
   const { data: tasks } = useQuery<Task[]>({
     queryKey: [`/api/tasks?workspaceId=${currentWorkspace?.id}`],
+    enabled: !!currentWorkspace,
+  });
+
+  const { data: payments } = useQuery<Payment[]>({
+    queryKey: [`/api/payments?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
@@ -549,8 +577,10 @@ export default function Projects() {
               client={clients?.find(c => c.id === project.clientId)}
               tasks={tasks || []}
               timeEntries={timeEntries || []}
+              payments={payments || []}
               onEdit={handleEdit}
               onDelete={(id) => deleteMutation.mutate(id)}
+              onClick={() => setLocation(`/projects/${project.id}`)}
             />
           ))}
         </div>

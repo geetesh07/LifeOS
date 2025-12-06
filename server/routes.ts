@@ -6,12 +6,19 @@ import {
   insertWorkspaceSchema, insertClientSchema, insertProjectSchema,
   insertTaskStatusSchema, insertTaskSchema, insertTimeEntrySchema, insertHabitSchema,
   insertHabitCompletionSchema, insertDiaryEntrySchema, insertNoteSchema,
-  insertEventSchema,
+  insertEventSchema, insertPaymentSchema, insertExpenseSchema,
+  insertMilestoneSchema, insertProjectNoteSchema,
 } from "@shared/schema";
 import { google } from "googleapis";
 import { format } from "date-fns";
+import { getOAuthClient, syncGoogleCalendar } from "./services/google-calendar";
 
 export async function registerRoutes(server: Server, app: Express): Promise<void> {
+  // Health Check
+  app.get("/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   // Workspaces
   app.get("/api/workspaces", async (req, res) => {
     try {
@@ -84,6 +91,18 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     }
   });
 
+  app.get("/api/clients/:id", async (req, res) => {
+    try {
+      const client = await storage.getClient(req.params.id);
+      if (!client) {
+        return res.status(404).json({ error: "Client not found" });
+      }
+      res.json(client);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch client" });
+    }
+  });
+
   app.post("/api/clients", async (req, res) => {
     try {
       const data = insertClientSchema.parse(req.body);
@@ -129,6 +148,18 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       res.json(projects);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch projects" });
+    }
+  });
+
+  app.get("/api/projects/:id", async (req, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      res.json(project);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch project" });
     }
   });
 
@@ -447,10 +478,14 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
 
   app.post("/api/habit-completions", async (req, res) => {
     try {
-      const data = insertHabitCompletionSchema.parse(req.body);
-      const completion = await storage.createHabitCompletion(data);
+      const data = {
+        ...req.body,
+        date: req.body.date ? new Date(req.body.date) : new Date(),
+      };
+      const completion = await storage.createHabitCompletion(insertHabitCompletionSchema.parse(data));
       res.status(201).json(completion);
     } catch (error) {
+      console.error("Habit completion error:", error);
       res.status(400).json({ error: "Invalid completion data" });
     }
   });
@@ -490,12 +525,22 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
 
   app.patch("/api/diary-entries/:id", async (req, res) => {
     try {
-      const entry = await storage.updateDiaryEntry(req.params.id, req.body);
+      console.log("Diary update request body:", JSON.stringify(req.body, null, 2));
+      // Convert date string to Date object if present, otherwise remove from data
+      const data: Record<string, any> = { ...req.body };
+      if (data.date) {
+        data.date = new Date(data.date);
+      } else {
+        delete data.date; // Don't pass undefined/null date
+      }
+      console.log("Processed data:", data);
+      const entry = await storage.updateDiaryEntry(req.params.id, data);
       if (!entry) {
         return res.status(404).json({ error: "Diary entry not found" });
       }
       res.json(entry);
     } catch (error) {
+      console.error("Diary entry update error:", error);
       res.status(500).json({ error: "Failed to update diary entry" });
     }
   });
@@ -945,98 +990,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         return res.status(400).json({ error: "userId and workspaceId are required" });
       }
 
-      const tokens = await storage.getGoogleCalendarTokens(userId as string);
-      if (!tokens) {
-        return res.status(401).json({ error: "Not connected to Google Calendar" });
-      }
-
-      const oauth2Client = await getOAuthClient(workspaceId as string);
-      oauth2Client.setCredentials({
-        access_token: tokens.accessToken,
-        refresh_token: tokens.refreshToken,
-        expiry_date: tokens.expiryDate
-      });
-
-      // Handle token refresh if needed
-      oauth2Client.on('tokens', async (newTokens) => {
-        if (newTokens.access_token) {
-          await storage.saveGoogleCalendarTokens({
-            userId: userId as string,
-            workspaceId: workspaceId as string,
-            accessToken: newTokens.access_token,
-            refreshToken: newTokens.refresh_token || tokens.refreshToken,
-            expiryDate: newTokens.expiry_date || Date.now() + 3600 * 1000,
-          });
-        }
-      });
-
-      const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-
-      const response = await calendar.events.list({
-        calendarId: 'primary',
-        timeMin: new Date().toISOString(),
-        maxResults: 50, // Increased limit
-        singleEvents: true,
-        orderBy: 'startTime',
-      });
-
-      const googleEvents = response.data.items || [];
-      const googleEventIds = new Set(googleEvents.map(e => e.id).filter(id => !!id));
-
-      // 1. Sync to Database (Upsert)
-      for (const googleEvent of googleEvents) {
-        if (!googleEvent.id) continue;
-
-        const eventData = {
-          workspaceId: workspaceId as string,
-          googleEventId: googleEvent.id,
-          title: googleEvent.summary || 'No Title',
-          description: googleEvent.description || null,
-          startTime: new Date(googleEvent.start?.dateTime || googleEvent.start?.date || new Date()),
-          endTime: new Date(googleEvent.end?.dateTime || googleEvent.end?.date || new Date()),
-          isAllDay: !googleEvent.start?.dateTime,
-          location: googleEvent.location || null,
-          isFromGoogle: true,
-          color: "#DB4437" // Google Red
-        };
-
-        // Check if event exists
-        const existingEvent = await storage.getEventByGoogleId(googleEvent.id);
-
-        if (existingEvent) {
-          await storage.updateEvent(existingEvent.id, eventData);
-        } else {
-          await storage.createEvent(eventData);
-        }
-      }
-
-      // 2. Handle Deletions (Google -> LifeOS)
-      // Fetch all local events that are from Google
-      const allLocalEvents = await storage.getEvents(workspaceId as string);
-      const localGoogleEvents = allLocalEvents.filter(e => e.isFromGoogle && e.googleEventId);
-
-      for (const localEvent of localGoogleEvents) {
-        if (localEvent.googleEventId && !googleEventIds.has(localEvent.googleEventId)) {
-          // Event exists locally as Google event, but not in the fresh Google fetch
-          // This means it was deleted on Google. Delete it locally.
-          console.log(`[Sync] Deleting local event ${localEvent.id} because it was deleted on Google.`);
-          await storage.deleteEvent(localEvent.id);
-        }
-      }
-
-      // Return the mapped events (or we could return local events now)
-      const mappedEvents = googleEvents.map(event => ({
-        id: event.id,
-        title: event.summary || 'No Title',
-        description: event.description,
-        startTime: event.start?.dateTime || event.start?.date,
-        endTime: event.end?.dateTime || event.end?.date,
-        location: event.location,
-        isAllDay: !event.start?.dateTime,
-        isFromGoogle: true,
-        googleEventId: event.id
-      }));
-
+      const mappedEvents = await syncGoogleCalendar(userId as string, workspaceId as string);
       res.json(mappedEvents);
     } catch (error) {
       console.error("Error fetching Google Calendar events:", error);
@@ -1165,6 +1119,217 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     } catch (error) {
       console.error("Task status fix error:", error);
       res.status(500).json({ error: "Failed to fix task statuses" });
+    }
+  });
+
+  // Payments
+  app.get("/api/payments", async (req, res) => {
+    try {
+      const workspaceId = req.query.workspaceId as string;
+      if (!workspaceId) {
+        return res.status(400).json({ error: "workspaceId is required" });
+      }
+      const payments = await storage.getPayments(workspaceId);
+      res.json(payments);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch payments" });
+    }
+  });
+
+  app.post("/api/payments", async (req, res) => {
+    try {
+      const data = {
+        ...req.body,
+        paymentDate: req.body.paymentDate ? new Date(req.body.paymentDate) : new Date(),
+        // Convert empty strings to null for optional foreign keys
+        projectId: req.body.projectId || null,
+        clientId: req.body.clientId || null,
+      };
+      const validatedData = insertPaymentSchema.parse(data);
+      const payment = await storage.createPayment(validatedData);
+      res.status(201).json(payment);
+    } catch (error) {
+      console.error("Payment create error:", error);
+      res.status(400).json({ error: "Invalid payment data" });
+    }
+  });
+
+  // Expenses
+  app.get("/api/expenses", async (req, res) => {
+    try {
+      const workspaceId = req.query.workspaceId as string;
+      if (!workspaceId) {
+        return res.status(400).json({ error: "workspaceId is required" });
+      }
+      const expenses = await storage.getExpenses(workspaceId);
+      res.json(expenses);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch expenses" });
+    }
+  });
+
+  app.post("/api/expenses", async (req, res) => {
+    try {
+      const data = {
+        ...req.body,
+        expenseDate: req.body.expenseDate ? new Date(req.body.expenseDate) : new Date(),
+      };
+      const validatedData = insertExpenseSchema.parse(data);
+      const expense = await storage.createExpense(validatedData);
+      res.status(201).json(expense);
+    } catch (error) {
+      console.error("Expense create error:", error);
+      res.status(400).json({ error: "Invalid expense data" });
+    }
+  });
+
+  app.patch("/api/payments/:id", async (req, res) => {
+    try {
+      const data = {
+        ...req.body,
+        paymentDate: req.body.paymentDate ? new Date(req.body.paymentDate) : undefined,
+        projectId: req.body.projectId || null,
+        clientId: req.body.clientId || null,
+      };
+      const payment = await storage.updatePayment(req.params.id, data);
+      if (!payment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+      res.json(payment);
+    } catch (error) {
+      console.error("Payment update error:", error);
+      res.status(500).json({ error: "Failed to update payment" });
+    }
+  });
+
+  app.delete("/api/payments/:id", async (req, res) => {
+    try {
+      await storage.deletePayment(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete payment" });
+    }
+  });
+
+  app.patch("/api/expenses/:id", async (req, res) => {
+    try {
+      const data = {
+        ...req.body,
+        expenseDate: req.body.expenseDate ? new Date(req.body.expenseDate) : undefined,
+        projectId: req.body.projectId || null,
+      };
+      const expense = await storage.updateExpense(req.params.id, data);
+      if (!expense) {
+        return res.status(404).json({ error: "Expense not found" });
+      }
+      res.json(expense);
+    } catch (error) {
+      console.error("Expense update error:", error);
+      res.status(500).json({ error: "Failed to update expense" });
+    }
+  });
+
+  app.delete("/api/expenses/:id", async (req, res) => {
+    try {
+      await storage.deleteExpense(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete expense" });
+    }
+  });
+
+  // Milestones
+  app.get("/api/milestones", async (req, res) => {
+    try {
+      const projectId = req.query.projectId as string;
+      if (!projectId) {
+        return res.status(400).json({ error: "projectId is required" });
+      }
+      const milestones = await storage.getMilestones(projectId);
+      res.json(milestones);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch milestones" });
+    }
+  });
+
+  app.post("/api/milestones", async (req, res) => {
+    try {
+      const data = {
+        ...req.body,
+        dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
+      };
+      const validatedData = insertMilestoneSchema.parse(data);
+      const milestone = await storage.createMilestone(validatedData);
+      res.status(201).json(milestone);
+    } catch (error) {
+      console.error("Milestone create error:", error);
+      res.status(400).json({ error: "Invalid milestone data" });
+    }
+  });
+
+  app.patch("/api/milestones/:id", async (req, res) => {
+    try {
+      const data = {
+        ...req.body,
+        dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
+        completedAt: req.body.completedAt ? new Date(req.body.completedAt) : undefined,
+      };
+      const milestone = await storage.updateMilestone(req.params.id, data);
+      if (!milestone) {
+        return res.status(404).json({ error: "Milestone not found" });
+      }
+      res.json(milestone);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update milestone" });
+    }
+  });
+
+  app.delete("/api/milestones/:id", async (req, res) => {
+    try {
+      const success = await storage.deleteMilestone(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Milestone not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete milestone" });
+    }
+  });
+
+  // Project Notes (Discussions)
+  app.get("/api/project-notes", async (req, res) => {
+    try {
+      const projectId = req.query.projectId as string;
+      if (!projectId) {
+        return res.status(400).json({ error: "projectId is required" });
+      }
+      const notes = await storage.getProjectNotes(projectId);
+      res.json(notes);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch project notes" });
+    }
+  });
+
+  app.post("/api/project-notes", async (req, res) => {
+    try {
+      const validatedData = insertProjectNoteSchema.parse(req.body);
+      const note = await storage.createProjectNote(validatedData);
+      res.status(201).json(note);
+    } catch (error) {
+      console.error("Project note create error:", error);
+      res.status(400).json({ error: "Invalid project note data" });
+    }
+  });
+
+  app.delete("/api/project-notes/:id", async (req, res) => {
+    try {
+      const success = await storage.deleteProjectNote(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Project note not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete project note" });
     }
   });
 }

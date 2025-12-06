@@ -51,9 +51,12 @@ export const projects = pgTable("projects", {
   description: text("description"),
   color: text("color").notNull().default("#8B5CF6"),
   status: text("status").notNull().default("active"), // active, completed, archived
+  priority: text("priority").notNull().default("medium"), // low, medium, high, urgent
   budget: real("budget"),
   hourlyRate: real("hourly_rate"),
+  startDate: timestamp("start_date"),
   dueDate: timestamp("due_date"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const projectsRelations = relations(projects, ({ one, many }) => ({
@@ -61,6 +64,40 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   client: one(clients, { fields: [projects.clientId], references: [clients.id] }),
   tasks: many(tasks),
   timeEntries: many(timeEntries),
+  milestones: many(milestones),
+  projectNotes: many(projectNotes),
+}));
+
+// Milestones - key project phases and delivery dates
+export const milestones = pgTable("milestones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  workspaceId: varchar("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  dueDate: timestamp("due_date"),
+  completedAt: timestamp("completed_at"),
+  order: integer("order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const milestonesRelations = relations(milestones, ({ one }) => ({
+  project: one(projects, { fields: [milestones.projectId], references: [projects.id] }),
+  workspace: one(workspaces, { fields: [milestones.workspaceId], references: [workspaces.id] }),
+}));
+
+// Project Notes - discussions and notes for projects
+export const projectNotes = pgTable("project_notes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  workspaceId: varchar("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const projectNotesRelations = relations(projectNotes, ({ one }) => ({
+  project: one(projects, { fields: [projectNotes.projectId], references: [projects.id] }),
+  workspace: one(workspaces, { fields: [projectNotes.workspaceId], references: [workspaces.id] }),
 }));
 
 // Task Statuses - custom workflow states per workspace
@@ -169,6 +206,8 @@ export const tasks = pgTable("tasks", {
   priority: text("priority").notNull().default("medium"), // low, medium, high, urgent
   color: text("color"),
   dueDate: timestamp("due_date"),
+  reminderMinutes: integer("reminder_minutes"),
+  reminderSent: boolean("reminder_sent").notNull().default(false),
   estimatedMinutes: integer("estimated_minutes"),
   completedAt: timestamp("completed_at"),
   order: integer("order").notNull().default(0),
@@ -278,6 +317,7 @@ export const events = pgTable("events", {
   color: text("color"),
   location: text("location"),
   reminderMinutes: integer("reminder_minutes"),
+  reminderSent: boolean("reminder_sent").notNull().default(false),
   isFromGoogle: boolean("is_from_google").notNull().default(false),
 });
 
@@ -294,6 +334,15 @@ export const userSettings = pgTable("user_settings", {
   showQuotes: boolean("show_quotes").notNull().default(true),
   notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
   weekStartsOn: integer("week_starts_on").notNull().default(1), // 0 = Sunday, 1 = Monday
+});
+
+// Push Subscriptions
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: text("user_id").notNull(),
+  endpoint: text("endpoint").notNull(),
+  keys: jsonb("keys").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Insert Schemas
@@ -314,6 +363,8 @@ export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true 
 export const insertQuickTodoSchema = createInsertSchema(quickTodos);
 export const insertGoogleOAuthSettingsSchema = createInsertSchema(googleOAuthSettings);
 export const insertGoogleCalendarTokensSchema = createInsertSchema(googleCalendarTokens);
+export const insertMilestoneSchema = createInsertSchema(milestones).omit({ id: true });
+export const insertProjectNoteSchema = createInsertSchema(projectNotes).omit({ id: true });
 
 // Types
 export type Workspace = typeof workspaces.$inferSelect;
@@ -350,17 +401,34 @@ export type GoogleOAuthSettings = typeof googleOAuthSettings.$inferSelect;
 export type InsertGoogleOAuthSettings = z.infer<typeof insertGoogleOAuthSettingsSchema>;
 export type GoogleCalendarTokens = typeof googleCalendarTokens.$inferSelect;
 export type InsertGoogleCalendarTokens = z.infer<typeof insertGoogleCalendarTokensSchema>;
+export type Milestone = typeof milestones.$inferSelect;
+export type InsertMilestone = z.infer<typeof insertMilestoneSchema>;
+export type ProjectNote = typeof projectNotes.$inferSelect;
+export type InsertProjectNote = z.infer<typeof insertProjectNoteSchema>;
 
-// Legacy user schema for compatibility
+export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions);
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
+
+// Session table (managed by connect-pg-simple)
+export const session = pgTable("session", {
+  sid: varchar("sid").primaryKey(),
+  sess: jsonb("sess").notNull(),
+  expire: timestamp("expire", { precision: 6 }).notNull(),
+});
+
+// User schema
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  email: text("email"), // Optional for now to support existing users
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+  email: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;

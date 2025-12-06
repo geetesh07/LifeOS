@@ -1,50 +1,29 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database (optional - use when DB_PROVIDER=local)
-  postgres:
-    image: postgres:16-alpine
-    container_name: lifeflow-db
-    environment:
-      POSTGRES_DB: lifeflow
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-lifeflow_dev_password}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - lifeflow-network
-
-  # LifeFlow Application
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: lifeflow-app
+    build: .
     ports:
       - "7777:7777"
     environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/lifeos
       - NODE_ENV=production
       - PORT=7777
-      - DATABASE_URL=${DATABASE_URL}
-      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
     depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - lifeflow-network
-    restart: unless-stopped
+      - db
+    restart: always
+
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=lifeos
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
 
 volumes:
   postgres_data:
-
-networks:
-  lifeflow-network:
-    driver: bridge

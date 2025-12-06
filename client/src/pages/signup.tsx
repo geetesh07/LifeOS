@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
-import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/auth-context';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -8,12 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 
 export default function SignupPage() {
     const [, setLocation] = useLocation();
+    const { register } = useAuth();
+    const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [success, setSuccess] = useState(false);
 
     const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -33,19 +34,8 @@ export default function SignupPage() {
         }
 
         try {
-            const { data, error } = await supabase.auth.signUp({
-                email,
-                password,
-                options: {
-                    emailRedirectTo: window.location.origin,
-                },
-            });
-
-            if (error) throw error;
-
-            if (data.user) {
-                setSuccess(true);
-            }
+            await register({ username, password, email });
+            setLocation('/dashboard');
         } catch (err: any) {
             setError(err.message || 'Failed to create account');
         } finally {
@@ -53,40 +43,13 @@ export default function SignupPage() {
         }
     };
 
-    if (success) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-                <Card className="w-full max-w-md">
-                    <CardHeader>
-                        <CardTitle className="text-2xl font-bold text-center">Check your email</CardTitle>
-                        <CardDescription className="text-center">
-                            We've sent you a confirmation link to <strong>{email}</strong>
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <p className="text-sm text-muted-foreground text-center">
-                            Click the link in the email to complete your registration.
-                        </p>
-                        <Button
-                            variant="outline"
-                            className="w-full"
-                            onClick={() => setLocation('/login')}
-                        >
-                            Go to Login
-                        </Button>
-                    </CardContent>
-                </Card>
-            </div>
-        );
-    }
-
     return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
             <Card className="w-full max-w-md">
                 <CardHeader className="space-y-1">
                     <CardTitle className="text-3xl font-bold text-center">Create Account</CardTitle>
                     <CardDescription className="text-center">
-                        Get started with LifeFlow today
+                        Get started with LifeOS today
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -96,9 +59,21 @@ export default function SignupPage() {
                             <Input
                                 id="email"
                                 type="email"
-                                placeholder="you@example.com"
+                                placeholder="name@example.com"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
+                                required
+                                disabled={loading}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="username">Username</Label>
+                            <Input
+                                id="username"
+                                type="text"
+                                placeholder="username"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
                                 required
                                 disabled={loading}
                             />
@@ -151,3 +126,4 @@ export default function SignupPage() {
         </div>
     );
 }
+
