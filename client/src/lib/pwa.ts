@@ -1,6 +1,22 @@
 // PWA utilities and helpers
 
-// Request notification permission
+// Helper to convert base64 url to Uint8Array for VAPID key
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding)
+        .replace(/-/g, '+')
+        .replace(/_/g, '/');
+
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+// Request notification permission and subscribe to push
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
     if (!('Notification' in window)) {
         console.warn('Notifications not supported');
@@ -22,32 +38,52 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 }
 
 async function subscribeToPush() {
-    if (!('serviceWorker' in navigator)) return;
+    if (!('serviceWorker' in navigator)) {
+        console.warn('[PWA] Service Worker not supported');
+        return;
+    }
 
     try {
         const registration = await navigator.serviceWorker.ready;
+        console.log('[PWA] Service Worker ready, subscribing to push...');
 
-        // Get VAPID key from env (exposed via API or hardcoded for now)
-        // In a real app, fetch this from an endpoint
-        const response = await fetch('/api/vapid-public-key'); // We need to add this endpoint
-        // For now, we'll skip if we don't have the key, or use a placeholder if we set it up
-        // const vapidPublicKey = ...
+        // Get VAPID key from server
+        const response = await fetch('/api/vapid-public-key');
+        const { publicKey } = await response.json();
 
-        // Skipping actual subscription for now until we expose the key
-        // const subscription = await registration.pushManager.subscribe({
-        //     userVisibleOnly: true,
-        //     applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
-        // });
+        if (!publicKey) {
+            console.error('[PWA] No VAPID public key returned');
+            return;
+        }
 
-        // await fetch('/api/notifications/subscribe', {
-        //     method: 'POST',
-        //     body: JSON.stringify(subscription),
-        //     headers: {
-        //         'Content-Type': 'application/json',
-        //     },
-        // });
+        console.log('[PWA] Got VAPID public key, creating push subscription...');
+
+        // Subscribe to push notifications
+        const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey)
+        });
+
+        console.log('[PWA] Push subscription created, saving to server...');
+
+        // Save subscription to server
+        const saveResponse = await fetch('/api/push/subscribe', {
+            method: 'POST',
+            body: JSON.stringify(subscription.toJSON()),
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+        });
+
+        if (saveResponse.ok) {
+            console.log('[PWA] Push subscription saved successfully!');
+        } else {
+            const error = await saveResponse.json();
+            console.error('[PWA] Failed to save push subscription:', error);
+        }
     } catch (error) {
-        console.error('Failed to subscribe to push:', error);
+        console.error('[PWA] Failed to subscribe to push:', error);
     }
 }
 

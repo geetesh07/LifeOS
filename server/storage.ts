@@ -2,7 +2,7 @@ import {
   workspaces, clients, projects, tasks, timeEntries,
   habits, habitCompletions, diaryEntries, notes, events, userSettings,
   taskStatuses, googleOAuthSettings, quickTodos, payments, expenses,
-  milestones, projectNotes,
+  milestones, projectNotes, notificationLogs,
   type Workspace, type InsertWorkspace,
   type Client, type InsertClient,
   type Project, type InsertProject,
@@ -24,6 +24,7 @@ import {
   type Expense, type InsertExpense,
   type Milestone, type InsertMilestone,
   type ProjectNote, type InsertProjectNote,
+  type NotificationLog, type InsertNotificationLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, gte, lte, sql, or } from "drizzle-orm";
@@ -140,6 +141,7 @@ export interface IStorage {
 
   // Push Subscriptions
   getPushSubscription(userId: string): Promise<PushSubscription | undefined>;
+  getAllPushSubscriptions(userId: string): Promise<PushSubscription[]>;
   savePushSubscription(data: InsertPushSubscription): Promise<PushSubscription>;
 
   // Reminders
@@ -149,6 +151,8 @@ export interface IStorage {
   markEventReminderSent(id: string): Promise<void>;
   markTaskReminderSent(id: string): Promise<void>;
   markTaskReminder2Sent(id: string): Promise<void>;
+  getAllTasksWithPendingReminders(): Promise<Task[]>;
+  getAllEventsWithPendingReminders(): Promise<Event[]>;
 
   // Milestones
   getMilestones(projectId: string): Promise<Milestone[]>;
@@ -161,6 +165,11 @@ export interface IStorage {
   getProjectNotes(projectId: string): Promise<ProjectNote[]>;
   createProjectNote(data: InsertProjectNote): Promise<ProjectNote>;
   deleteProjectNote(id: string): Promise<boolean>;
+
+  // Notification Logs
+  createNotificationLog(data: InsertNotificationLog): Promise<NotificationLog>;
+  getNotificationLogs(userId: string, limit?: number): Promise<NotificationLog[]>;
+  clearNotificationLogs(userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -707,9 +716,26 @@ export class DatabaseStorage implements IStorage {
     return sub;
   }
 
+  // Get ALL subscriptions for a user (multi-device support)
+  async getAllPushSubscriptions(userId: string): Promise<PushSubscription[]> {
+    return db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+  }
+
   async savePushSubscription(data: InsertPushSubscription): Promise<PushSubscription> {
-    // Delete existing for simplicity (one device per user for now, or handle multiple)
-    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, data.userId));
+    // Upsert by endpoint - allows multiple devices per user
+    // First check if this exact endpoint already exists
+    const [existing] = await db.select().from(pushSubscriptions)
+      .where(eq(pushSubscriptions.endpoint, data.endpoint));
+
+    if (existing) {
+      // Update existing subscription
+      const [updated] = await db.update(pushSubscriptions)
+        .set({ keys: data.keys, userId: data.userId })
+        .where(eq(pushSubscriptions.endpoint, data.endpoint))
+        .returning();
+      return updated;
+    }
+
     const [sub] = await db.insert(pushSubscriptions).values(data).returning();
     return sub;
   }
@@ -781,41 +807,62 @@ export class DatabaseStorage implements IStorage {
 
   async getDueTasks(defaultMinutes: number): Promise<Task[]> {
     const now = new Date();
-    // Get tasks with START dates that haven't had reminder 1 sent
+    // Get ALL tasks that haven't had reminder 1 sent and have a startDate
     const allTasks = await db.select().from(tasks)
       .where(
         and(
           eq(tasks.reminderSent, false),
-          gte(tasks.startDate, now) // Check startDate for reminder 1
+          sql`${tasks.startDate} IS NOT NULL`,
+          sql`${tasks.reminderMinutes} IS NOT NULL`
         )
       );
 
-    // Filter tasks where the START time reminder should fire now
+    console.log(`[Storage] getDueTasks: Found ${allTasks.length} tasks with reminderSent=false and startDate set`);
+
+    // Filter tasks where the START time is within the reminder window
+    // i.e., startDate is between now and (now + reminderMinutes)
     return allTasks.filter(task => {
       if (!task.startDate || !task.reminderMinutes) return false;
+      const startDate = new Date(task.startDate);
       const reminderMins = task.reminderMinutes;
       const reminderTime = addMinutes(now, reminderMins);
-      return task.startDate <= reminderTime;
+
+      // Task should fire if startDate is in the future but within reminderMinutes from now
+      const shouldFire = startDate > now && startDate <= reminderTime;
+      if (shouldFire) {
+        console.log(`[Storage] Task "${task.title}" qualifies: starts at ${startDate.toISOString()}, reminder window ends at ${reminderTime.toISOString()}`);
+      }
+      return shouldFire;
     });
   }
 
   async getDueTasks2(defaultMinutes: number): Promise<Task[]> {
     const now = new Date();
-    // Get tasks with due dates that haven't had reminder 2 sent
+    // Get ALL tasks that haven't had reminder 2 sent and have a dueDate
     const allTasks = await db.select().from(tasks)
       .where(
         and(
           eq(tasks.reminder2Sent, false),
-          gte(tasks.dueDate, now)
+          sql`${tasks.dueDate} IS NOT NULL`,
+          sql`${tasks.reminder2Minutes} IS NOT NULL`
         )
       );
 
-    // Filter tasks where the second reminder should fire now
+    console.log(`[Storage] getDueTasks2: Found ${allTasks.length} tasks with reminder2Sent=false and dueDate set`);
+
+    // Filter tasks where the DUE time is within the reminder window
     return allTasks.filter(task => {
       if (!task.dueDate || !task.reminder2Minutes) return false;
+      const dueDate = new Date(task.dueDate);
       const reminderMins = task.reminder2Minutes;
       const reminderTime = addMinutes(now, reminderMins);
-      return task.dueDate <= reminderTime;
+
+      // Task should fire if dueDate is in the future but within reminder2Minutes from now
+      const shouldFire = dueDate > now && dueDate <= reminderTime;
+      if (shouldFire) {
+        console.log(`[Storage] Task "${task.title}" deadline qualifies: due at ${dueDate.toISOString()}, reminder window ends at ${reminderTime.toISOString()}`);
+      }
+      return shouldFire;
     });
   }
 
@@ -829,6 +876,56 @@ export class DatabaseStorage implements IStorage {
 
   async markTaskReminder2Sent(id: string): Promise<void> {
     await db.update(tasks).set({ reminder2Sent: true }).where(eq(tasks.id, id));
+  }
+
+  // Notification Logs
+  async createNotificationLog(data: InsertNotificationLog): Promise<NotificationLog> {
+    const [log] = await db.insert(notificationLogs).values(data).returning();
+    return log;
+  }
+
+  async getNotificationLogs(userId: string, limit: number = 50): Promise<NotificationLog[]> {
+    return db.select().from(notificationLogs)
+      .where(eq(notificationLogs.userId, userId))
+      .orderBy(desc(notificationLogs.sentAt))
+      .limit(limit);
+  }
+
+  async clearNotificationLogs(userId: string): Promise<void> {
+    await db.delete(notificationLogs).where(eq(notificationLogs.userId, userId));
+  }
+
+  async getAllTasksWithPendingReminders(): Promise<Task[]> {
+    const now = new Date();
+    // Get tasks with future start/due dates where reminders haven't been sent
+    return db.select().from(tasks)
+      .where(
+        or(
+          and(
+            eq(tasks.reminderSent, false),
+            sql`${tasks.startDate} IS NOT NULL`,
+            sql`${tasks.reminderMinutes} IS NOT NULL`,
+            gte(tasks.startDate, now)
+          ),
+          and(
+            eq(tasks.reminder2Sent, false),
+            sql`${tasks.dueDate} IS NOT NULL`,
+            sql`${tasks.reminder2Minutes} IS NOT NULL`,
+            gte(tasks.dueDate, now)
+          )
+        )
+      );
+  }
+
+  async getAllEventsWithPendingReminders(): Promise<Event[]> {
+    const now = new Date();
+    return db.select().from(events)
+      .where(
+        and(
+          eq(events.reminderSent, false),
+          gte(events.startTime, now)
+        )
+      );
   }
 }
 

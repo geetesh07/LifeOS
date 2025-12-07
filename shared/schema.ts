@@ -351,6 +351,24 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Notification Logs - track sent notifications
+export const notificationLogs = pgTable("notification_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: text("user_id").notNull(),
+  workspaceId: varchar("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  type: text("type").notNull(), // 'task_start', 'task_deadline', 'event_reminder'
+  relatedId: varchar("related_id"), // task.id or event.id
+  deviceInfo: text("device_info"), // Browser/device info
+  deliveryStatus: text("delivery_status").notNull().default("sent"), // sent, delivered, failed
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+});
+
+export const notificationLogsRelations = relations(notificationLogs, ({ one }) => ({
+  workspace: one(workspaces, { fields: [notificationLogs.workspaceId], references: [workspaces.id] }),
+}));
+
 // Insert Schemas
 export const insertWorkspaceSchema = createInsertSchema(workspaces).omit({ id: true });
 export const insertClientSchema = createInsertSchema(clients).omit({ id: true });
@@ -371,6 +389,7 @@ export const insertGoogleOAuthSettingsSchema = createInsertSchema(googleOAuthSet
 export const insertGoogleCalendarTokensSchema = createInsertSchema(googleCalendarTokens);
 export const insertMilestoneSchema = createInsertSchema(milestones).omit({ id: true });
 export const insertProjectNoteSchema = createInsertSchema(projectNotes).omit({ id: true });
+export const insertNotificationLogSchema = createInsertSchema(notificationLogs).omit({ id: true });
 
 // Types
 export type Workspace = typeof workspaces.$inferSelect;
@@ -411,6 +430,8 @@ export type Milestone = typeof milestones.$inferSelect;
 export type InsertMilestone = z.infer<typeof insertMilestoneSchema>;
 export type ProjectNote = typeof projectNotes.$inferSelect;
 export type InsertProjectNote = z.infer<typeof insertProjectNoteSchema>;
+export type NotificationLog = typeof notificationLogs.$inferSelect;
+export type InsertNotificationLog = z.infer<typeof insertNotificationLogSchema>;
 
 export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions);
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;

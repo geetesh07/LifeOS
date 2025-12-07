@@ -64,12 +64,14 @@ app.use((req, res, next) => {
 
 import { setupAuth } from "./auth";
 import { setupScheduler } from "./services/scheduler";
+import { initializeNotificationScheduler } from "./services/notification-scheduler";
 
 // ...
 
 (async () => {
   setupAuth(app);
-  setupScheduler();
+  setupScheduler(); // Google Calendar sync only
+  await initializeNotificationScheduler(); // Event-based task notifications
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

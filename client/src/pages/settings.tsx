@@ -37,6 +37,8 @@ import {
   Star,
   Edit,
   Save,
+  History,
+  Clock,
 } from "lucide-react";
 import { showNotification } from "@/lib/pwa";
 import { useTheme } from "@/lib/theme-provider";
@@ -44,7 +46,7 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Workspace, InsertWorkspace, UserSettings } from "@shared/schema";
+import type { Workspace, InsertWorkspace, UserSettings, NotificationLog } from "@shared/schema";
 
 const iconOptions = [
   { value: "briefcase", label: "Briefcase", icon: Briefcase },
@@ -493,14 +495,84 @@ export default function Settings() {
     setIsDialogOpen(true);
   };
 
+  // Notification History Component
+  const NotificationHistoryList = ({ userId }: { userId?: string }) => {
+    const { data: logs, isLoading } = useQuery<NotificationLog[]>({
+      queryKey: ["/api/notification-logs"],
+      enabled: !!userId,
+    });
+
+    if (isLoading) {
+      return <p className="text-sm text-muted-foreground">Loading notification history...</p>;
+    }
+
+    if (!logs || logs.length === 0) {
+      return (
+        <div className="text-center py-8 text-muted-foreground">
+          <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
+          <p>No notifications sent yet</p>
+          <p className="text-sm">Notifications will appear here when tasks or events trigger reminders</p>
+        </div>
+      );
+    }
+
+    const getTypeBadge = (type: string) => {
+      switch (type) {
+        case 'event_reminder':
+          return <span className="px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">📅 Event</span>;
+        case 'task_start':
+          return <span className="px-2 py-0.5 text-xs rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">🔔 Task Start</span>;
+        case 'task_deadline':
+          return <span className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">⚠️ Deadline</span>;
+        default:
+          return <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300">{type}</span>;
+      }
+    };
+
+    const formatDate = (date: string | Date) => {
+      const d = new Date(date);
+      const now = new Date();
+      const diffMs = now.getTime() - d.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+
+      if (diffMins < 1) return 'Just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays < 7) return `${diffDays}d ago`;
+      return d.toLocaleDateString();
+    };
+
+    return (
+      <div className="space-y-3 max-h-[400px] overflow-y-auto">
+        {logs.map((log) => (
+          <div key={log.id} className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
+            <div className="flex-shrink-0 mt-1">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                {getTypeBadge(log.type)}
+                <span className="text-xs text-muted-foreground">{formatDate(log.sentAt)}</span>
+              </div>
+              <p className="font-medium text-sm truncate">{log.title}</p>
+              <p className="text-sm text-muted-foreground truncate">{log.body}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   if (settingsLoading) {
     return <div>Loading settings...</div>;
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6 px-4 sm:px-6 lg:px-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground mt-1">
           Customize your LifeOS experience
         </p>
@@ -524,12 +596,13 @@ export default function Settings() {
                 Choose your preferred color scheme
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <Button
                 variant={theme === "light" ? "secondary" : "ghost"}
                 size="sm"
                 onClick={() => updateSettingsMutation.mutate({ theme: "light" })}
                 data-testid="button-theme-light"
+                className="w-full sm:w-auto"
               >
                 <Sun className="h-4 w-4 mr-2" />
                 Light
@@ -539,6 +612,7 @@ export default function Settings() {
                 size="sm"
                 onClick={() => updateSettingsMutation.mutate({ theme: "dark" })}
                 data-testid="button-theme-dark"
+                className="w-full sm:w-auto"
               >
                 <Moon className="h-4 w-4 mr-2" />
                 Dark
@@ -548,6 +622,7 @@ export default function Settings() {
                 size="sm"
                 onClick={() => updateSettingsMutation.mutate({ theme: "system" })}
                 data-testid="button-theme-system"
+                className="w-full sm:w-auto"
               >
                 <Monitor className="h-4 w-4 mr-2" />
                 System
@@ -643,42 +718,6 @@ export default function Settings() {
               Send Test Notification
             </Button>
           </div>
-
-          <Separator className="my-4" />
-
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium">Test Notifications</p>
-              <p className="text-sm text-muted-foreground">
-                Send a test notification to check if they are working
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (Notification.permission === 'granted') {
-                  new Notification('Test Notification', {
-                    body: 'This is how your notifications will look! 🍯',
-                    icon: '/favicon.png'
-                  });
-                } else if (Notification.permission !== 'denied') {
-                  Notification.requestPermission().then(permission => {
-                    if (permission === 'granted') {
-                      new Notification('Test Notification', {
-                        body: 'This is how your notifications will look! 🍯',
-                        icon: '/favicon.png'
-                      });
-                    }
-                  });
-                } else {
-                  toast({ title: "Notifications blocked", description: "Please enable notifications in your browser settings", variant: "destructive" });
-                }
-              }}
-            >
-              Send Test
-            </Button>
-          </div>
         </CardContent>
       </Card>
 
@@ -768,6 +807,22 @@ export default function Settings() {
               />
             ))
           )}
+        </CardContent>
+      </Card>
+
+      {/* Notification History */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <History className="h-5 w-5" />
+            Notification History
+          </CardTitle>
+          <CardDescription>
+            View recent notifications sent to your devices
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <NotificationHistoryList userId={user?.id} />
         </CardContent>
       </Card>
 

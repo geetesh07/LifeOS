@@ -47,6 +47,7 @@ import SignupPage from "@/pages/signup";
 import { AuthProvider } from "@/lib/auth-context";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { MissedDeadlinePrompt } from "@/components/MissedDeadlinePrompt";
 import { registerServiceWorker, setupInstallPrompt, requestNotificationPermission } from "@/lib/pwa";
 
 const iconOptions = [
@@ -264,6 +265,7 @@ function AppContent() {
   const [location] = useLocation();
   const { setWorkspaces } = useWorkspace();
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
+  const [isMissedDeadlineOpen, setIsMissedDeadlineOpen] = useState(false);
 
   const { data: workspaces } = useQuery<Workspace[]>({
     queryKey: ["/api/workspaces"],
@@ -317,6 +319,10 @@ function AppContent() {
       <WorkspaceModal
         open={isWorkspaceModalOpen}
         onClose={() => setIsWorkspaceModalOpen(false)}
+      />
+      <MissedDeadlinePrompt
+        open={isMissedDeadlineOpen}
+        onOpenChange={setIsMissedDeadlineOpen}
       />
     </SidebarProvider>
   );

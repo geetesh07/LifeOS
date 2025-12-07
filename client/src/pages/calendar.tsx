@@ -32,6 +32,10 @@ import {
   MapPin,
   Calendar as CalendarIcon,
   RefreshCw,
+  LayoutGrid,
+  CalendarDays,
+  GanttChart,
+  CalendarRange,
 } from "lucide-react";
 import { useWorkspace } from "@/lib/workspace-context";
 import { useAuth } from "@/lib/auth-context";
@@ -49,8 +53,13 @@ import {
   isToday,
   addMonths,
   subMonths,
+  addWeeks,
+  subWeeks,
+  addDays,
   parseISO,
 } from "date-fns";
+import { WeekView, ThreeDayView } from "@/components/calendar/TimeViews";
+import { GanttView, type GanttTask } from "@/components/calendar/GanttView";
 import type { Event, Task, InsertEvent } from "@shared/schema";
 
 const colorOptions = [
@@ -389,6 +398,7 @@ export default function Calendar() {
   const { currentWorkspace } = useWorkspace();
   const { toast } = useToast();
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [viewType, setViewType] = useState<'month' | 'week' | 'threeDay' | 'gantt'>('month');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [editingEvent, setEditingEvent] = useState<Event | undefined>();
@@ -399,7 +409,7 @@ export default function Calendar() {
   });
 
   const { data: tasks } = useQuery<Task[]>({
-    queryKey: ["/api/tasks", currentWorkspace?.id],
+    queryKey: [`/api/tasks?workspaceId=${currentWorkspace?.id}`],
     enabled: !!currentWorkspace,
   });
 
@@ -450,15 +460,19 @@ export default function Calendar() {
       isFromGoogle: e.isFromGoogle,
       type: "event" as const,
     })) || []),
-    ...(tasks?.filter(t => t.dueDate).map(t => ({
-      id: `task-${t.id}`,
-      title: t.title,
-      startTime: new Date(t.dueDate!),
-      endTime: new Date(t.dueDate!),
-      color: t.color || "#6366F1",
-      isAllDay: true,
-      type: "task" as const,
-    })) || []),
+    ...(tasks?.filter(t => t.dueDate || t.startDate).map(t => {
+      const hasTimeRange = t.startDate && t.dueDate;
+      return {
+        id: `task-${t.id}`,
+        title: t.title,
+        startTime: new Date(t.startDate || t.dueDate!),
+        endTime: new Date(t.dueDate || t.startDate!),
+        color: t.color || "#6366F1",
+        isAllDay: !hasTimeRange,
+        type: "task" as const,
+        priority: t.priority,
+      };
+    }) || []),
     ...(googleEvents?.map((e: any) => ({
       id: `google-${e.id}`,
       title: e.summary || "Untitled",
@@ -555,42 +569,104 @@ export default function Calendar() {
 
       <Card>
         <CardHeader className="pb-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-                data-testid="button-prev-month"
+                onClick={() => {
+                  if (viewType === 'month') setCurrentMonth(subMonths(currentMonth, 1));
+                  else if (viewType === 'week') setCurrentMonth(subWeeks(currentMonth, 1));
+                  else if (viewType === 'threeDay') setCurrentMonth(addDays(currentMonth, -3));
+                  else setCurrentMonth(subWeeks(currentMonth, 2));
+                }}
+                data-testid="button-prev"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <h2 className="text-xl font-semibold" data-testid="text-current-month">
-                {format(currentMonth, "MMMM yyyy")}
+              <h2 className="text-lg sm:text-xl font-semibold min-w-[140px] text-center" data-testid="text-current-period">
+                {viewType === 'month'
+                  ? format(currentMonth, "MMMM yyyy")
+                  : viewType === 'gantt'
+                    ? `${format(currentMonth, "MMM d")} - ${format(addDays(currentMonth, 13), "MMM d, yyyy")}`
+                    : format(currentMonth, "MMM d, yyyy")
+                }
               </h2>
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-                data-testid="button-next-month"
+                onClick={() => {
+                  if (viewType === 'month') setCurrentMonth(addMonths(currentMonth, 1));
+                  else if (viewType === 'week') setCurrentMonth(addWeeks(currentMonth, 1));
+                  else if (viewType === 'threeDay') setCurrentMonth(addDays(currentMonth, 3));
+                  else setCurrentMonth(addWeeks(currentMonth, 2));
+                }}
+                data-testid="button-next"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setCurrentMonth(new Date())}
-              data-testid="button-today"
-            >
-              Today
-            </Button>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setCurrentMonth(new Date())}
+                data-testid="button-today"
+              >
+                Today
+              </Button>
+
+              {/* View Switcher */}
+              <div className="flex border rounded-lg overflow-hidden">
+                <Button
+                  variant={viewType === "month" ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewType("month")}
+                  className="rounded-none"
+                  title="Month View"
+                >
+                  <LayoutGrid className="h-4 w-4 sm:mr-1" />
+                  <span className="hidden sm:inline">Month</span>
+                </Button>
+                <Button
+                  variant={viewType === "week" ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewType("week")}
+                  className="rounded-none"
+                  title="Week View"
+                >
+                  <CalendarDays className="h-4 w-4 sm:mr-1" />
+                  <span className="hidden sm:inline">Week</span>
+                </Button>
+                <Button
+                  variant={viewType === "threeDay" ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewType("threeDay")}
+                  className="rounded-none"
+                  title="3-Day View"
+                >
+                  <CalendarRange className="h-4 w-4 sm:mr-1" />
+                  <span className="hidden sm:inline">3-Day</span>
+                </Button>
+                <Button
+                  variant={viewType === "gantt" ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewType("gantt")}
+                  className="rounded-none"
+                  title="Gantt Chart"
+                >
+                  <GanttChart className="h-4 w-4 sm:mr-1" />
+                  <span className="hidden sm:inline">Gantt</span>
+                </Button>
+              </div>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
           {eventsLoading ? (
             <CardSkeleton count={1} className="h-[600px] grid-cols-1" />
-          ) : (
+          ) : viewType === 'month' ? (
             <>
               <div className="grid grid-cols-7 border-b">
                 {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
@@ -612,6 +688,51 @@ export default function Calendar() {
                 ))}
               </div>
             </>
+          ) : viewType === 'week' ? (
+            <div className="h-[600px] overflow-hidden">
+              <WeekView
+                days={eachDayOfInterval({
+                  start: startOfWeek(currentMonth, { weekStartsOn: 1 }),
+                  end: endOfWeek(currentMonth, { weekStartsOn: 1 }),
+                })}
+                events={calendarEvents}
+                onEventClick={handleEventClick}
+                onDayClick={handleDayClick}
+              />
+            </div>
+          ) : viewType === 'threeDay' ? (
+            <div className="h-[600px] overflow-hidden">
+              <ThreeDayView
+                days={[currentMonth, addDays(currentMonth, 1), addDays(currentMonth, 2)]}
+                events={calendarEvents}
+                onEventClick={handleEventClick}
+                onDayClick={handleDayClick}
+              />
+            </div>
+          ) : (
+            <div className="h-[500px] overflow-hidden">
+              <GanttView
+                tasks={calendarEvents
+                  .filter(e => !e.isAllDay)
+                  .map(e => ({
+                    id: e.id,
+                    title: e.title,
+                    startDate: e.startTime,
+                    endDate: e.endTime,
+                    color: e.color,
+                    priority: (e as any).priority || 'medium',
+                    type: e.type,
+                  }))}
+                currentDate={currentMonth}
+                onTaskClick={(task) => {
+                  const originalEvent = events?.find(e => e.id === task.id);
+                  if (originalEvent) {
+                    setEditingEvent(originalEvent);
+                    setIsDialogOpen(true);
+                  }
+                }}
+              />
+            </div>
           )}
         </CardContent>
       </Card>

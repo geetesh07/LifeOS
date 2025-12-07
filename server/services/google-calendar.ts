@@ -46,13 +46,24 @@ export async function syncGoogleCalendar(userId: string, workspaceId: string) {
 
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
-    const response = await calendar.events.list({
-        calendarId: 'primary',
-        timeMin: new Date().toISOString(),
-        maxResults: 50,
-        singleEvents: true,
-        orderBy: 'startTime',
-    });
+    let response;
+    try {
+        response = await calendar.events.list({
+            calendarId: 'primary',
+            timeMin: new Date().toISOString(),
+            maxResults: 50,
+            singleEvents: true,
+            orderBy: 'startTime',
+        });
+    } catch (error: any) {
+        if (error?.status === 401 || error?.code === 401) {
+            // Auth expired - user needs to re-authenticate in Settings
+            console.log(`[Sync] Google Calendar auth expired for user ${userId} - please re-connect in Settings`);
+            return [];
+        }
+        console.error(`[Sync] Error syncing Google Calendar:`, error.message || 'Unknown error');
+        return [];
+    }
 
     const googleEvents = response.data.items || [];
     const googleEventIds = new Set(googleEvents.map(e => e.id).filter(id => !!id));

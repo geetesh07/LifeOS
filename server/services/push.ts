@@ -1,39 +1,74 @@
 import webpush from "web-push";
 import { storage } from "../storage";
 
-// VAPID keys should be generated once and stored in env vars
-// For this setup, we'll generate them if missing, but in prod they should be fixed
-const publicVapidKey = process.env.VAPID_PUBLIC_KEY || "BMk_...placeholder...";
-const privateVapidKey = process.env.VAPID_PRIVATE_KEY || "placeholder...";
+// Generate VAPID keys once and store them for the session
+let vapidPublicKey: string;
+let vapidPrivateKey: string;
 
-// If keys are not set, we can generate them (for dev convenience)
-if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
-    const vapidKeys = webpush.generateVAPIDKeys();
-    console.log("Generated VAPID Keys (Add these to your .env):");
-    console.log("VAPID_PUBLIC_KEY=", vapidKeys.publicKey);
-    console.log("VAPID_PRIVATE_KEY=", vapidKeys.privateKey);
-
-    webpush.setVapidDetails(
-        "mailto:example@yourdomain.org",
-        vapidKeys.publicKey,
-        vapidKeys.privateKey
-    );
+// Initialize VAPID keys
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+    vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
+    vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
 } else {
-    webpush.setVapidDetails(
-        "mailto:example@yourdomain.org",
-        publicVapidKey,
-        privateVapidKey
-    );
+    // Generate new keys for development
+    const vapidKeys = webpush.generateVAPIDKeys();
+    vapidPublicKey = vapidKeys.publicKey;
+    vapidPrivateKey = vapidKeys.privateKey;
+    console.log("Generated VAPID Keys (Add these to your .env for persistence):");
+    console.log("VAPID_PUBLIC_KEY=" + vapidPublicKey);
+    console.log("VAPID_PRIVATE_KEY=" + vapidPrivateKey);
+}
+
+webpush.setVapidDetails(
+    "mailto:notifications@lifeos.app",
+    vapidPublicKey,
+    vapidPrivateKey
+);
+
+// Export the public key so the client can subscribe
+export function getVapidPublicKey(): string {
+    return vapidPublicKey;
 }
 
 export async function sendPushNotification(userId: string, title: string, body: string, url = "/") {
-    // In a real app, we would store subscriptions in the DB
-    // For now, we'll assume we have a way to get them or just log
     console.log(`[PUSH] Sending to user ${userId}: ${title} - ${body}`);
 
-    // TODO: Retrieve subscription from DB
-    // const subscription = await storage.getPushSubscription(userId);
-    // if (subscription) {
-    //   await webpush.sendNotification(subscription, JSON.stringify({ title, body, url }));
-    // }
+    try {
+        // Retrieve ALL subscriptions for the user (multi-device support)
+        const subscriptions = await storage.getAllPushSubscriptions(userId);
+
+        if (subscriptions.length === 0) {
+            console.log(`[PUSH] No subscriptions found for user ${userId}`);
+            return;
+        }
+
+        console.log(`[PUSH] Found ${subscriptions.length} device(s) for user ${userId}`);
+
+        const payload = JSON.stringify({
+            title,
+            body,
+            url,
+            icon: "/favicon.png",
+            badge: "/favicon.png",
+        });
+
+        // Send to all devices
+        const results = await Promise.allSettled(
+            subscriptions.map(async (subscription) => {
+                const pushSubscription = {
+                    endpoint: subscription.endpoint,
+                    keys: subscription.keys as { p256dh: string; auth: string },
+                };
+                return webpush.sendNotification(pushSubscription, payload);
+            })
+        );
+
+        const successful = results.filter(r => r.status === "fulfilled").length;
+        const failed = results.filter(r => r.status === "rejected").length;
+
+        console.log(`[PUSH] Sent to ${successful}/${subscriptions.length} devices (${failed} failed)`);
+    } catch (error) {
+        console.error(`[PUSH] Error sending notification to user ${userId}:`, error);
+    }
 }
+

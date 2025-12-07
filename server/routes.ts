@@ -12,11 +12,45 @@ import {
 import { google } from "googleapis";
 import { format } from "date-fns";
 import { getOAuthClient, syncGoogleCalendar } from "./services/google-calendar";
+import { getVapidPublicKey } from "./services/push";
+import { scheduleTaskNotifications, cancelTaskNotifications, scheduleEventNotification, cancelEventNotifications } from "./services/notification-scheduler";
 
 export async function registerRoutes(server: Server, app: Express): Promise<void> {
   // Health Check
   app.get("/health", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // Push Notifications - VAPID public key
+  app.get("/api/vapid-public-key", (req, res) => {
+    res.json({ publicKey: getVapidPublicKey() });
+  });
+
+  // Push Notifications - Subscribe
+  app.post("/api/push/subscribe", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    try {
+      const { endpoint, keys } = req.body;
+      if (!endpoint || !keys) {
+        return res.status(400).json({ error: "Invalid subscription data" });
+      }
+
+      await storage.savePushSubscription({
+        userId,
+        endpoint,
+        keys,
+      });
+
+      console.log(`[PUSH] Subscription saved for user ${userId}`);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("[PUSH] Error saving subscription:", error);
+      res.status(500).json({ error: "Failed to save subscription" });
+    }
   });
 
   // Workspaces
@@ -44,7 +78,10 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   app.post("/api/workspaces", async (req, res) => {
     try {
       const data = insertWorkspaceSchema.parse(req.body);
-      const workspace = await storage.createWorkspace(data);
+      // Auto-set userId from authenticated user
+      const userId = req.user?.id;
+      const workspaceData = { ...data, userId: userId || data.userId };
+      const workspace = await storage.createWorkspace(workspaceData);
       // Initialize default task statuses for new workspace
       await initializeDefaultStatuses(workspace.id);
       res.status(201).json(workspace);
@@ -74,6 +111,56 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete workspace" });
+    }
+  });
+
+  // Notification Logs
+  app.get("/api/notification-logs", async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      const limit = parseInt(req.query.limit as string) || 50;
+      const logs = await storage.getNotificationLogs(userId, limit);
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch notification logs" });
+    }
+  });
+
+  app.delete("/api/notification-logs", async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      await storage.clearNotificationLogs(userId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to clear notification logs" });
+    }
+  });
+
+  // Fix workspaces with null userId - sets current user as owner
+  app.post("/api/workspaces/fix-userid", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    try {
+      const workspaces = await storage.getWorkspaces();
+      let fixed = 0;
+      for (const ws of workspaces) {
+        if (!ws.userId) {
+          await storage.updateWorkspace(ws.id, { userId });
+          fixed++;
+        }
+      }
+      res.json({ message: `Fixed ${fixed} workspaces`, fixed });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fix workspaces" });
     }
   });
 
@@ -302,10 +389,15 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       // Convert date strings to Date objects (dates are serialized as strings over HTTP)
       const data = {
         ...req.body,
+        startDate: req.body.startDate ? new Date(req.body.startDate) : null,
         dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
       };
       const validatedData = insertTaskSchema.parse(data);
       const task = await storage.createTask(validatedData);
+
+      // Schedule notifications for this task
+      scheduleTaskNotifications(task);
+
       res.status(201).json(task);
     } catch (error) {
       console.error("Task creation error:", error);
@@ -315,9 +407,15 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
 
   app.patch("/api/tasks/:id", async (req, res) => {
     try {
-      // Convert completedAt to Date if present
+      // Convert date fields if present
       const updates = {
         ...req.body,
+        ...(req.body.startDate !== undefined && {
+          startDate: req.body.startDate ? new Date(req.body.startDate) : null
+        }),
+        ...(req.body.dueDate !== undefined && {
+          dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null
+        }),
         ...(req.body.completedAt !== undefined && {
           completedAt: req.body.completedAt ? new Date(req.body.completedAt) : null
         }),
@@ -328,6 +426,10 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       if (!task) {
         return res.status(404).json({ error: "Task not found" });
       }
+
+      // Reschedule notifications for this task
+      scheduleTaskNotifications(task);
+
       res.json(task);
     } catch (error) {
       console.error("[API] Task update error:", error);
@@ -337,6 +439,9 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
 
   app.delete("/api/tasks/:id", async (req, res) => {
     try {
+      // Cancel any scheduled notifications
+      cancelTaskNotifications(req.params.id);
+
       const success = await storage.deleteTask(req.params.id);
       if (!success) {
         return res.status(404).json({ error: "Task not found" });
@@ -1330,6 +1435,23 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete project note" });
+    }
+  });
+
+  // Notification Logs
+  app.get("/api/notification-logs", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const logs = await storage.getNotificationLogs(userId, limit);
+      res.json(logs);
+    } catch (error) {
+      console.error("Failed to get notification logs:", error);
+      res.status(500).json({ error: "Failed to get notification logs" });
     }
   });
 }

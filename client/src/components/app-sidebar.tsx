@@ -31,6 +31,7 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { useAuth } from "@/lib/auth-context";
 import { LogOut } from "lucide-react";
 import { Button } from "./ui/button";
+import { NotificationBell } from "./NotificationBell";
 
 const mainNavItems = [
   {
@@ -139,11 +140,16 @@ export function AppSidebar({ onAddWorkspace }: AppSidebarProps) {
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="px-2 py-3">
-          <div className="flex items-center gap-2 px-2 mb-4">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">LO</span>
+          <div className="flex items-center justify-between px-2 mb-4">
+            <div className="flex items-center gap-2">
+              <img
+                src="/onlyfavicon.png"
+                alt="LifeOS"
+                className="w-8 h-8 rounded-lg"
+              />
+              <span className="font-semibold text-lg">LifeOS</span>
             </div>
-            <span className="font-semibold text-lg">LifeOS</span>
+            <NotificationBell />
           </div>
           <WorkspaceSwitcher onAddWorkspace={onAddWorkspace} />
         </div>
