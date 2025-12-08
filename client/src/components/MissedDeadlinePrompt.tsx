@@ -110,17 +110,19 @@ export function MissedDeadlinePrompt({ open, onOpenChange }: MissedDeadlinePromp
 
     return (
         <>
-            {/* Floating action button for missed tasks */}
-            <Button
-                variant="destructive"
-                size="sm"
-                className="fixed bottom-4 right-4 z-50 gap-2 shadow-lg animate-bounce sm:bottom-6 sm:right-6"
+            {/* Subtle floating indicator for missed tasks */}
+            <button
                 onClick={() => onOpenChange(true)}
+                className="fixed bottom-20 right-4 z-50 flex items-center gap-2 px-3 py-2 rounded-full bg-background/95 backdrop-blur-sm border border-border shadow-md hover:shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 sm:bottom-6 sm:right-6 group"
             >
-                <AlertTriangle className="h-4 w-4" />
-                <span className="hidden sm:inline">{missedTasks.length} Missed</span>
-                <span className="sm:hidden">{missedTasks.length}</span>
-            </Button>
+                <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                </span>
+                <span className="text-sm font-medium text-foreground/80 group-hover:text-foreground">
+                    {missedTasks.length} overdue
+                </span>
+            </button>
 
             {/* Main dialog */}
             <Dialog open={open} onOpenChange={onOpenChange}>
