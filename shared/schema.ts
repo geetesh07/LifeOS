@@ -171,20 +171,23 @@ export const quickTodosRelations = relations(quickTodos, ({ one }) => ({
   workspace: one(workspaces, { fields: [quickTodos.workspaceId], references: [workspaces.id] }),
 }));
 
-// Project Todos - project-specific checklists
+// Project Todos - project-specific checklists with nesting support
 export const projectTodos = pgTable("project_todos", {
   id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   workspaceId: varchar("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  parentTodoId: varchar("parent_todo_id"), // For nested todos
   title: text("title").notNull(),
   completed: boolean("completed").notNull().default(false),
   order: integer("order").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const projectTodosRelations = relations(projectTodos, ({ one }) => ({
+export const projectTodosRelations = relations(projectTodos, ({ one, many }) => ({
   project: one(projects, { fields: [projectTodos.projectId], references: [projects.id] }),
   workspace: one(workspaces, { fields: [projectTodos.workspaceId], references: [workspaces.id] }),
+  parentTodo: one(projectTodos, { fields: [projectTodos.parentTodoId], references: [projectTodos.id], relationName: "subTodos" }),
+  subTodos: many(projectTodos, { relationName: "subTodos" }),
 }));
 
 // Google OAuth Settings - workspace-specific OAuth credentials

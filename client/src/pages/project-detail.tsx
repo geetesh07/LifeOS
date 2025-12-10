@@ -38,6 +38,9 @@ import {
     Edit,
     Flag,
     CheckSquare,
+    ChevronDown,
+    ChevronRight,
+    ListTree,
 } from "lucide-react";
 import { useWorkspace } from "@/lib/workspace-context";
 import { useToast } from "@/hooks/use-toast";
@@ -58,6 +61,237 @@ const statusColors = {
     completed: "bg-blue-500",
     archived: "bg-gray-500",
 };
+
+// Component for displaying a task with expandable subtasks
+function ProjectTaskItem({
+    task,
+    status,
+    subtasks,
+    completedSubtasksCount,
+    hasSubtasks,
+    taskStatuses,
+    doneStatuses,
+}: {
+    task: Task;
+    status?: TaskStatus;
+    subtasks: Task[];
+    completedSubtasksCount: number;
+    hasSubtasks: boolean;
+    taskStatuses: TaskStatus[];
+    doneStatuses: string[];
+}) {
+    const [expanded, setExpanded] = React.useState(false);
+
+    return (
+        <div className="rounded-lg border bg-card/50">
+            <div className="flex items-center justify-between p-3">
+                <div className="flex items-center gap-3">
+                    <Checkbox checked={!!task.completedAt} disabled />
+                    <div>
+                        <p className={task.completedAt ? "line-through text-muted-foreground" : "font-medium"}>
+                            {task.title}
+                        </p>
+                        {task.dueDate && (
+                            <p className="text-xs text-muted-foreground">
+                                Due: {format(new Date(task.dueDate), "MMM d, yyyy")}
+                            </p>
+                        )}
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    {hasSubtasks && (
+                        <Badge variant="outline" className="text-xs">
+                            <ListTree className="h-3 w-3 mr-1" />
+                            {completedSubtasksCount}/{subtasks.length}
+                        </Badge>
+                    )}
+                    {status && (
+                        <Badge style={{ backgroundColor: status.color, color: "white" }}>
+                            {status.name}
+                        </Badge>
+                    )}
+                    <Badge variant="outline">{task.priority}</Badge>
+                </div>
+            </div>
+
+            {/* Expandable subtasks section */}
+            {hasSubtasks && (
+                <div className="px-3 pb-3 pt-0 border-t">
+                    <button
+                        onClick={() => setExpanded(!expanded)}
+                        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2 w-full"
+                    >
+                        {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        <span>{expanded ? "Hide" : "Show"} {subtasks.length} subtask{subtasks.length > 1 ? "s" : ""}</span>
+                    </button>
+                    {expanded && (
+                        <div className="space-y-2 pl-6">
+                            {subtasks.map(subtask => {
+                                const subtaskStatus = taskStatuses.find(s => s.id === subtask.statusId);
+                                const isDone = !!(subtask.statusId && doneStatuses.includes(subtask.statusId));
+                                return (
+                                    <div
+                                        key={subtask.id}
+                                        className="flex items-center justify-between p-2 rounded-lg bg-muted/50"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <Checkbox checked={isDone} disabled />
+                                            <span className={isDone ? "line-through text-muted-foreground text-sm" : "text-sm"}>
+                                                {subtask.title}
+                                            </span>
+                                        </div>
+                                        {subtaskStatus && (
+                                            <Badge
+                                                variant="outline"
+                                                className="text-xs"
+                                                style={{ borderColor: subtaskStatus.color, color: subtaskStatus.color }}
+                                            >
+                                                {subtaskStatus.name}
+                                            </Badge>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// Nested checklist item component with sub-todos support
+function NestedChecklistItem({
+    todo,
+    allTodos,
+    projectId,
+    workspaceId,
+    onToggle,
+    onDelete,
+    onAddSubTodo,
+    depth = 0,
+}: {
+    todo: ProjectTodo;
+    allTodos: ProjectTodo[];
+    projectId: string;
+    workspaceId: string;
+    onToggle: (id: string, completed: boolean) => void;
+    onDelete: (id: string) => void;
+    onAddSubTodo: (parentId: string, title: string) => void;
+    depth?: number;
+}) {
+    const [expanded, setExpanded] = React.useState(true);
+    const [showAddForm, setShowAddForm] = React.useState(false);
+    const [subTodoTitle, setSubTodoTitle] = React.useState("");
+
+    const subTodos = allTodos.filter(t => t.parentTodoId === todo.id);
+    const hasSubTodos = subTodos.length > 0;
+    const completedSubTodos = subTodos.filter(t => t.completed);
+
+    const handleAddSubTodo = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (subTodoTitle.trim()) {
+            onAddSubTodo(todo.id, subTodoTitle);
+            setSubTodoTitle("");
+            setShowAddForm(false);
+        }
+    };
+
+    // Limit nesting depth to 2 levels
+    const canAddSubTodo = depth < 2;
+
+    return (
+        <div className={`rounded-lg border bg-card/50 ${depth > 0 ? "ml-6" : ""}`}>
+            <div className="flex items-center justify-between p-3 group">
+                <div className="flex items-center gap-3">
+                    {hasSubTodos ? (
+                        <button
+                            onClick={() => setExpanded(!expanded)}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </button>
+                    ) : (
+                        <div className="w-4" />
+                    )}
+                    <Checkbox
+                        checked={todo.completed}
+                        onCheckedChange={(checked) => onToggle(todo.id, !!checked)}
+                    />
+                    <div>
+                        <span className={todo.completed ? "line-through text-muted-foreground" : ""}>
+                            {todo.title}
+                        </span>
+                        {hasSubTodos && (
+                            <span className="text-xs text-muted-foreground ml-2">
+                                ({completedSubTodos.length}/{subTodos.length})
+                            </span>
+                        )}
+                    </div>
+                </div>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {canAddSubTodo && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => setShowAddForm(!showAddForm)}
+                            title="Add sub-item"
+                        >
+                            <Plus className="h-3 w-3" />
+                        </Button>
+                    )}
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive"
+                        onClick={() => onDelete(todo.id)}
+                    >
+                        <Trash2 className="h-3 w-3" />
+                    </Button>
+                </div>
+            </div>
+
+            {/* Add sub-todo form */}
+            {showAddForm && (
+                <form onSubmit={handleAddSubTodo} className="px-3 pb-3 flex gap-2 ml-7">
+                    <Input
+                        placeholder="Add sub-item..."
+                        value={subTodoTitle}
+                        onChange={(e) => setSubTodoTitle(e.target.value)}
+                        className="flex-1 h-8 text-sm"
+                        autoFocus
+                    />
+                    <Button type="submit" size="sm" disabled={!subTodoTitle.trim()}>
+                        Add
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setShowAddForm(false)}>
+                        Cancel
+                    </Button>
+                </form>
+            )}
+
+            {/* Sub-todos */}
+            {expanded && hasSubTodos && (
+                <div className="pb-2 space-y-2">
+                    {subTodos.map(subTodo => (
+                        <NestedChecklistItem
+                            key={subTodo.id}
+                            todo={subTodo}
+                            allTodos={allTodos}
+                            projectId={projectId}
+                            workspaceId={workspaceId}
+                            onToggle={onToggle}
+                            onDelete={onDelete}
+                            onAddSubTodo={onAddSubTodo}
+                            depth={depth + 1}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
 
 export default function ProjectDetailPage() {
     const [, params] = useRoute("/projects/:id");
@@ -212,6 +446,7 @@ export default function ProjectDetailPage() {
 
     // Calculate stats
     const projectTasks = tasks?.filter(t => t.projectId === projectId) || [];
+    const parentTasks = projectTasks.filter(t => !t.parentTaskId);
     const doneStatuses = taskStatuses?.filter(s => s.isDoneState).map(s => s.id) || [];
     const completedTasks = projectTasks.filter(t => t.statusId && doneStatuses.includes(t.statusId));
     const projectTimeEntries = timeEntries?.filter(t => t.projectId === projectId) || [];
@@ -452,36 +687,27 @@ export default function ProjectDetailPage() {
                             <CardTitle>Project Tasks ({projectTasks.length})</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            {projectTasks.length === 0 ? (
+                            {parentTasks.length === 0 ? (
                                 <p className="text-muted-foreground text-center py-8">No tasks for this project yet</p>
                             ) : (
                                 <div className="space-y-2">
-                                    {projectTasks.map(task => {
+                                    {parentTasks.map(task => {
                                         const status = taskStatuses?.find(s => s.id === task.statusId);
+                                        const subtasks = projectTasks.filter(t => t.parentTaskId === task.id);
+                                        const completedSubtasks = subtasks.filter(s => s.statusId && doneStatuses.includes(s.statusId));
+                                        const hasSubtasks = subtasks.length > 0;
+
                                         return (
-                                            <div key={task.id} className="flex items-center justify-between p-3 rounded-lg border bg-card/50">
-                                                <div className="flex items-center gap-3">
-                                                    <Checkbox checked={!!task.completedAt} disabled />
-                                                    <div>
-                                                        <p className={task.completedAt ? "line-through text-muted-foreground" : "font-medium"}>
-                                                            {task.title}
-                                                        </p>
-                                                        {task.dueDate && (
-                                                            <p className="text-xs text-muted-foreground">
-                                                                Due: {format(new Date(task.dueDate), "MMM d, yyyy")}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    {status && (
-                                                        <Badge style={{ backgroundColor: status.color, color: "white" }}>
-                                                            {status.name}
-                                                        </Badge>
-                                                    )}
-                                                    <Badge variant="outline">{task.priority}</Badge>
-                                                </div>
-                                            </div>
+                                            <ProjectTaskItem
+                                                key={task.id}
+                                                task={task}
+                                                status={status}
+                                                subtasks={subtasks}
+                                                completedSubtasksCount={completedSubtasks.length}
+                                                hasSubtasks={hasSubtasks}
+                                                taskStatuses={taskStatuses || []}
+                                                doneStatuses={doneStatuses}
+                                            />
                                         );
                                     })}
                                 </div>
@@ -529,41 +755,30 @@ export default function ProjectDetailPage() {
                                 </Button>
                             </form>
 
-                            {/* Todo list */}
+                            {/* Todo list - nested structure */}
                             {!projectTodos || projectTodos.length === 0 ? (
                                 <p className="text-muted-foreground text-center py-8">
                                     No checklist items yet. Add your first!
                                 </p>
                             ) : (
                                 <div className="space-y-2">
-                                    {projectTodos.map(todo => (
-                                        <div
+                                    {/* Filter only parent todos (no parentTodoId) */}
+                                    {projectTodos.filter(t => !t.parentTodoId).map(todo => (
+                                        <NestedChecklistItem
                                             key={todo.id}
-                                            className="flex items-center justify-between p-3 rounded-lg border bg-card/50 group"
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <Checkbox
-                                                    checked={todo.completed}
-                                                    onCheckedChange={(checked) => {
-                                                        toggleTodoMutation.mutate({
-                                                            id: todo.id,
-                                                            completed: !!checked,
-                                                        });
-                                                    }}
-                                                />
-                                                <span className={todo.completed ? "line-through text-muted-foreground" : ""}>
-                                                    {todo.title}
-                                                </span>
-                                            </div>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
-                                                onClick={() => deleteTodoMutation.mutate(todo.id)}
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </div>
+                                            todo={todo}
+                                            allTodos={projectTodos}
+                                            projectId={projectId!}
+                                            workspaceId={currentWorkspace!.id}
+                                            onToggle={(id, completed) => toggleTodoMutation.mutate({ id, completed })}
+                                            onDelete={(id) => deleteTodoMutation.mutate(id)}
+                                            onAddSubTodo={(parentId, title) => createTodoMutation.mutate({
+                                                projectId: projectId!,
+                                                workspaceId: currentWorkspace!.id,
+                                                title,
+                                                parentTodoId: parentId,
+                                            })}
+                                        />
                                     ))}
                                 </div>
                             )}
