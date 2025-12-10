@@ -7,7 +7,7 @@ import {
   insertTaskStatusSchema, insertTaskSchema, insertTimeEntrySchema, insertHabitSchema,
   insertHabitCompletionSchema, insertDiaryEntrySchema, insertNoteSchema,
   insertEventSchema, insertPaymentSchema, insertExpenseSchema,
-  insertMilestoneSchema, insertProjectNoteSchema,
+  insertMilestoneSchema, insertProjectNoteSchema, insertProjectTodoSchema,
 } from "@shared/schema";
 import { google } from "googleapis";
 import { format } from "date-fns";
@@ -425,6 +425,36 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       const task = await storage.updateTask(req.params.id, updates);
       if (!task) {
         return res.status(404).json({ error: "Task not found" });
+      }
+
+      // Check if this task has a parent and if we should auto-complete parent
+      if (task.parentTaskId && task.statusId) {
+        // Get the current status to check if it's a done state
+        const currentStatus = await storage.getTaskStatus(task.statusId);
+        if (currentStatus?.isDoneState) {
+          // Get all sibling subtasks (tasks with same parentTaskId)
+          const siblings = await storage.getSubtasks(task.parentTaskId);
+          // Get all statuses to check which are done states
+          const allStatuses = await storage.getTaskStatuses(task.workspaceId);
+          const doneStatusIds = allStatuses.filter(s => s.isDoneState).map(s => s.id);
+
+          // Check if all siblings are in done states
+          const allDone = siblings.every(sibling =>
+            sibling.statusId && doneStatusIds.includes(sibling.statusId)
+          );
+
+          if (allDone && siblings.length > 0) {
+            // Find a done status to set on parent
+            const doneStatus = allStatuses.find(s => s.isDoneState);
+            if (doneStatus) {
+              console.log(`[API] Auto-completing parent task ${task.parentTaskId} - all ${siblings.length} subtasks done`);
+              await storage.updateTask(task.parentTaskId, {
+                statusId: doneStatus.id,
+                completedAt: new Date()
+              });
+            }
+          }
+        }
       }
 
       // Reschedule notifications for this task
@@ -1435,6 +1465,65 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete project note" });
+    }
+  });
+
+  // Project Todos (Checklists)
+  app.get("/api/project-todos", async (req, res) => {
+    try {
+      const projectId = req.query.projectId as string;
+      if (!projectId) {
+        return res.status(400).json({ error: "projectId is required" });
+      }
+      const todos = await storage.getProjectTodos(projectId);
+      res.json(todos);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch project todos" });
+    }
+  });
+
+  app.post("/api/project-todos", async (req, res) => {
+    try {
+      const validatedData = insertProjectTodoSchema.parse(req.body);
+      const todo = await storage.createProjectTodo(validatedData);
+      res.status(201).json(todo);
+    } catch (error) {
+      console.error("Project todo create error:", error);
+      res.status(400).json({ error: "Invalid project todo data" });
+    }
+  });
+
+  app.patch("/api/project-todos/:id", async (req, res) => {
+    try {
+      const todo = await storage.updateProjectTodo(req.params.id, req.body);
+      if (!todo) {
+        return res.status(404).json({ error: "Project todo not found" });
+      }
+      res.json(todo);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update project todo" });
+    }
+  });
+
+  app.delete("/api/project-todos/:id", async (req, res) => {
+    try {
+      const success = await storage.deleteProjectTodo(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Project todo not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete project todo" });
+    }
+  });
+
+  // Subtasks API
+  app.get("/api/tasks/:id/subtasks", async (req, res) => {
+    try {
+      const subtasks = await storage.getSubtasks(req.params.id);
+      res.json(subtasks);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch subtasks" });
     }
   });
 

@@ -171,6 +171,22 @@ export const quickTodosRelations = relations(quickTodos, ({ one }) => ({
   workspace: one(workspaces, { fields: [quickTodos.workspaceId], references: [workspaces.id] }),
 }));
 
+// Project Todos - project-specific checklists
+export const projectTodos = pgTable("project_todos", {
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  workspaceId: varchar("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  completed: boolean("completed").notNull().default(false),
+  order: integer("order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const projectTodosRelations = relations(projectTodos, ({ one }) => ({
+  project: one(projects, { fields: [projectTodos.projectId], references: [projects.id] }),
+  workspace: one(workspaces, { fields: [projectTodos.workspaceId], references: [workspaces.id] }),
+}));
+
 // Google OAuth Settings - workspace-specific OAuth credentials
 export const googleOAuthSettings = pgTable("google_oauth_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -389,6 +405,7 @@ export const insertGoogleOAuthSettingsSchema = createInsertSchema(googleOAuthSet
 export const insertGoogleCalendarTokensSchema = createInsertSchema(googleCalendarTokens);
 export const insertMilestoneSchema = createInsertSchema(milestones).omit({ id: true });
 export const insertProjectNoteSchema = createInsertSchema(projectNotes).omit({ id: true });
+export const insertProjectTodoSchema = createInsertSchema(projectTodos).omit({ id: true });
 export const insertNotificationLogSchema = createInsertSchema(notificationLogs).omit({ id: true });
 
 // Types
@@ -430,6 +447,8 @@ export type Milestone = typeof milestones.$inferSelect;
 export type InsertMilestone = z.infer<typeof insertMilestoneSchema>;
 export type ProjectNote = typeof projectNotes.$inferSelect;
 export type InsertProjectNote = z.infer<typeof insertProjectNoteSchema>;
+export type ProjectTodo = typeof projectTodos.$inferSelect;
+export type InsertProjectTodo = z.infer<typeof insertProjectTodoSchema>;
 export type NotificationLog = typeof notificationLogs.$inferSelect;
 export type InsertNotificationLog = z.infer<typeof insertNotificationLogSchema>;
 

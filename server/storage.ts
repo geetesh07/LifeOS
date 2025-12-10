@@ -2,7 +2,7 @@ import {
   workspaces, clients, projects, tasks, timeEntries,
   habits, habitCompletions, diaryEntries, notes, events, userSettings,
   taskStatuses, googleOAuthSettings, quickTodos, payments, expenses,
-  milestones, projectNotes, notificationLogs,
+  milestones, projectNotes, notificationLogs, projectTodos,
   type Workspace, type InsertWorkspace,
   type Client, type InsertClient,
   type Project, type InsertProject,
@@ -25,6 +25,7 @@ import {
   type Milestone, type InsertMilestone,
   type ProjectNote, type InsertProjectNote,
   type NotificationLog, type InsertNotificationLog,
+  type ProjectTodo, type InsertProjectTodo,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, gte, lte, sql, or } from "drizzle-orm";
@@ -170,6 +171,15 @@ export interface IStorage {
   createNotificationLog(data: InsertNotificationLog): Promise<NotificationLog>;
   getNotificationLogs(userId: string, limit?: number): Promise<NotificationLog[]>;
   clearNotificationLogs(userId: string): Promise<void>;
+
+  // Project Todos
+  getProjectTodos(projectId: string): Promise<ProjectTodo[]>;
+  createProjectTodo(data: InsertProjectTodo): Promise<ProjectTodo>;
+  updateProjectTodo(id: string, data: Partial<ProjectTodo>): Promise<ProjectTodo | undefined>;
+  deleteProjectTodo(id: string): Promise<boolean>;
+
+  // Subtasks
+  getSubtasks(parentTaskId: string): Promise<Task[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -782,6 +792,35 @@ export class DatabaseStorage implements IStorage {
   async deleteProjectNote(id: string): Promise<boolean> {
     const result = await db.delete(projectNotes).where(eq(projectNotes.id, id)).returning();
     return result.length > 0;
+  }
+
+  // Project Todos
+  async getProjectTodos(projectId: string): Promise<ProjectTodo[]> {
+    return db.select().from(projectTodos)
+      .where(eq(projectTodos.projectId, projectId))
+      .orderBy(asc(projectTodos.order));
+  }
+
+  async createProjectTodo(data: InsertProjectTodo): Promise<ProjectTodo> {
+    const [todo] = await db.insert(projectTodos).values(data).returning();
+    return todo;
+  }
+
+  async updateProjectTodo(id: string, data: Partial<ProjectTodo>): Promise<ProjectTodo | undefined> {
+    const [todo] = await db.update(projectTodos).set(data).where(eq(projectTodos.id, id)).returning();
+    return todo;
+  }
+
+  async deleteProjectTodo(id: string): Promise<boolean> {
+    const result = await db.delete(projectTodos).where(eq(projectTodos.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Subtasks - get all subtasks for a parent task
+  async getSubtasks(parentTaskId: string): Promise<Task[]> {
+    return db.select().from(tasks)
+      .where(eq(tasks.parentTaskId, parentTaskId))
+      .orderBy(asc(tasks.order));
   }
 
   // Reminder methods - get items due for notification

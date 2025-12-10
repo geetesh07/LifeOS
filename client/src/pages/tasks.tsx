@@ -52,6 +52,9 @@ import {
   Search,
   LayoutGrid,
   List,
+  ChevronDown,
+  ChevronRight,
+  ListTree,
 } from "lucide-react";
 import { useWorkspace } from "@/lib/workspace-context";
 import { useToast } from "@/hooks/use-toast";
@@ -76,15 +79,18 @@ const priorityLabels: Record<string, string> = {
 };
 
 
-
 interface TaskCardProps {
   task: Task;
+  subtasks?: Task[];
+  doneStatusIds?: string[];
   onEdit: (task: Task) => void;
   onStatusChange: (taskId: string, status: string) => void;
   onDelete: (taskId: string) => void;
 }
 
-function TaskCard({ task, onEdit, onStatusChange, onDelete }: TaskCardProps) {
+function TaskCard({ task, subtasks = [], doneStatusIds = [], onEdit, onStatusChange, onDelete }: TaskCardProps) {
+  const [expanded, setExpanded] = useState(false);
+
   const formatDueDate = (date: Date) => {
     if (isToday(date)) return "Today";
     if (isTomorrow(date)) return "Tomorrow";
@@ -92,6 +98,8 @@ function TaskCard({ task, onEdit, onStatusChange, onDelete }: TaskCardProps) {
   };
 
   const isOverdue = task.dueDate && isPast(new Date(task.dueDate)) && task.status !== "done";
+  const completedSubtasks = subtasks.filter(s => s.statusId && doneStatusIds.includes(s.statusId));
+  const hasSubtasks = subtasks.length > 0;
 
   return (
     <Card
@@ -144,6 +152,12 @@ function TaskCard({ task, onEdit, onStatusChange, onDelete }: TaskCardProps) {
                   {task.estimatedMinutes}m
                 </Badge>
               )}
+              {hasSubtasks && (
+                <Badge variant="outline" className="text-xs">
+                  <ListTree className="h-3 w-3 mr-1" />
+                  {completedSubtasks.length}/{subtasks.length} subtasks
+                </Badge>
+              )}
             </div>
           </div>
 
@@ -174,6 +188,42 @@ function TaskCard({ task, onEdit, onStatusChange, onDelete }: TaskCardProps) {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+
+        {/* Expandable subtasks section */}
+        {hasSubtasks && (
+          <div className="mt-3 pt-3 border-t">
+            <button
+              onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full"
+            >
+              {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              <span>{expanded ? "Hide" : "Show"} {subtasks.length} subtask{subtasks.length > 1 ? "s" : ""}</span>
+            </button>
+            {expanded && (
+              <div className="mt-2 space-y-2 pl-6">
+                {subtasks.map(subtask => {
+                  const isDone = subtask.statusId && doneStatusIds.includes(subtask.statusId);
+                  return (
+                    <div
+                      key={subtask.id}
+                      className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                      onClick={() => onEdit(subtask)}
+                    >
+                      {isDone ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                      ) : (
+                        <Circle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      )}
+                      <span className={`text-sm ${isDone ? "line-through text-muted-foreground" : ""}`}>
+                        {subtask.title}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -184,12 +234,14 @@ function TaskForm({
   workspaceId,
   projects,
   statuses,
+  allTasks,
   onClose
 }: {
   task?: Task;
   workspaceId: string;
   projects: Project[];
   statuses: TaskStatus[];
+  allTasks?: Task[];
   onClose: () => void;
 }) {
   const { toast } = useToast();
@@ -224,6 +276,12 @@ function TaskForm({
       [10, 30, 60, 1440].includes(task.reminder2Minutes) ? task.reminder2Minutes.toString() : "custom"
     ) : "none"
   );
+  const [parentTaskId, setParentTaskId] = useState(task?.parentTaskId || "");
+
+  // Filter tasks that can be parents (not subtasks and not this task)
+  const parentableTasks = allTasks?.filter(t =>
+    !t.parentTaskId && t.id !== task?.id
+  ) || [];
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertTask) => {
@@ -269,6 +327,7 @@ function TaskForm({
       reminderSent: false,
       reminder2Minutes: reminder2Preset === "none" ? null : (reminder2Preset === "custom" ? parseInt(reminder2Minutes) : parseInt(reminder2Preset)),
       reminder2Sent: false,
+      parentTaskId: parentTaskId || null,
     };
 
     if (task) {
@@ -397,6 +456,32 @@ function TaskForm({
               {projects.map((project) => (
                 <SelectItem key={project.id} value={project.id}>
                   {project.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Parent Task (make this a subtask) */}
+      {parentableTasks.length > 0 && (
+        <div className="space-y-2">
+          <label className="text-sm font-medium flex items-center gap-2">
+            <ListTree className="h-4 w-4" />
+            Parent Task (make this a subtask)
+          </label>
+          <Select
+            value={parentTaskId || "_none"}
+            onValueChange={(val) => setParentTaskId(val === "_none" ? "" : val)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="No parent (top-level task)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">No parent (top-level task)</SelectItem>
+              {parentableTasks.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.title}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -562,6 +647,9 @@ export default function Tasks() {
   const doneStatusIds = statuses?.filter(s => s.isDoneState).map(s => s.id) || [];
 
   const filteredTasks = tasks?.filter(task => {
+    // Only show top-level tasks (not subtasks)
+    if (task.parentTaskId) return false;
+
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.description?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesPriority = priorityFilter === 'all' || task.priority === priorityFilter;
@@ -656,6 +744,7 @@ export default function Tasks() {
                 workspaceId={currentWorkspace.id}
                 projects={projects || []}
                 statuses={statuses || []}
+                allTasks={tasks}
                 onClose={handleCloseDialog}
               />
             </DialogContent>
@@ -766,6 +855,8 @@ export default function Tasks() {
               <TaskCard
                 key={task.id}
                 task={task}
+                subtasks={tasks?.filter(t => t.parentTaskId === task.id) || []}
+                doneStatusIds={doneStatusIds}
                 onEdit={handleEdit}
                 onStatusChange={(_, status) => {
                   const targetStatus = statuses.find(s => s.name.toLowerCase() === status.toLowerCase());

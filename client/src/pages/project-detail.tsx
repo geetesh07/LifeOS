@@ -37,13 +37,14 @@ import {
     Trash2,
     Edit,
     Flag,
+    CheckSquare,
 } from "lucide-react";
 import { useWorkspace } from "@/lib/workspace-context";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format, formatDistanceToNow, differenceInDays } from "date-fns";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
-import type { Project, Task, TimeEntry, Payment, Client, Milestone, ProjectNote, TaskStatus } from "@shared/schema";
+import type { Project, Task, TimeEntry, Payment, Client, Milestone, ProjectNote, TaskStatus, ProjectTodo } from "@shared/schema";
 
 const priorityColors = {
     low: "bg-slate-500",
@@ -69,6 +70,7 @@ export default function ProjectDetailPage() {
     const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
     const [noteContent, setNoteContent] = useState("");
     const [editProjectOpen, setEditProjectOpen] = useState(false);
+    const [newTodoTitle, setNewTodoTitle] = useState("");
 
     // Queries
     const { data: project, isLoading } = useQuery<Project>({
@@ -114,6 +116,11 @@ export default function ProjectDetailPage() {
     const { data: clients } = useQuery<Client[]>({
         queryKey: [`/api/clients?workspaceId=${currentWorkspace?.id}`],
         enabled: !!currentWorkspace,
+    });
+
+    const { data: projectTodos } = useQuery<ProjectTodo[]>({
+        queryKey: [`/api/project-todos?projectId=${projectId}`],
+        enabled: !!projectId,
     });
 
     // Mutations
@@ -168,6 +175,30 @@ export default function ProjectDetailPage() {
             queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}`] });
             toast({ title: "Project updated!" });
             setEditProjectOpen(false);
+        },
+    });
+
+    // Project Todo mutations
+    const createTodoMutation = useMutation({
+        mutationFn: async (data: any) => apiRequest("POST", "/api/project-todos", data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: [`/api/project-todos?projectId=${projectId}`] });
+            setNewTodoTitle("");
+        },
+    });
+
+    const toggleTodoMutation = useMutation({
+        mutationFn: async ({ id, completed }: { id: string; completed: boolean }) =>
+            apiRequest("PATCH", `/api/project-todos/${id}`, { completed }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: [`/api/project-todos?projectId=${projectId}`] });
+        },
+    });
+
+    const deleteTodoMutation = useMutation({
+        mutationFn: async (id: string) => apiRequest("DELETE", `/api/project-todos/${id}`),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: [`/api/project-todos?projectId=${projectId}`] });
         },
     });
 
@@ -391,10 +422,14 @@ export default function ProjectDetailPage() {
 
             {/* Tabs */}
             <Tabs defaultValue="tasks" className="w-full">
-                <TabsList className="grid w-full grid-cols-4 lg:grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5 lg:grid-cols-5">
                     <TabsTrigger value="tasks" className="flex items-center gap-2">
                         <ListTodo className="h-4 w-4" />
                         <span className="hidden sm:inline">Tasks</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="checklist" className="flex items-center gap-2">
+                        <CheckSquare className="h-4 w-4" />
+                        <span className="hidden sm:inline">Checklist</span>
                     </TabsTrigger>
                     <TabsTrigger value="milestones" className="flex items-center gap-2">
                         <Target className="h-4 w-4" />
@@ -449,6 +484,97 @@ export default function ProjectDetailPage() {
                                             </div>
                                         );
                                     })}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* Checklist Tab */}
+                <TabsContent value="checklist" className="mt-4">
+                    <Card className="glass">
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <div>
+                                <CardTitle>Project Checklist</CardTitle>
+                                {projectTodos && projectTodos.length > 0 && (
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        {projectTodos.filter(t => t.completed).length} of {projectTodos.length} completed
+                                    </p>
+                                )}
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            {/* Add new todo form */}
+                            <form
+                                onSubmit={(e) => {
+                                    e.preventDefault();
+                                    if (newTodoTitle.trim() && projectId && currentWorkspace) {
+                                        createTodoMutation.mutate({
+                                            projectId,
+                                            workspaceId: currentWorkspace.id,
+                                            title: newTodoTitle,
+                                        });
+                                    }
+                                }}
+                                className="flex gap-2"
+                            >
+                                <Input
+                                    placeholder="Add a checklist item..."
+                                    value={newTodoTitle}
+                                    onChange={(e) => setNewTodoTitle(e.target.value)}
+                                    className="flex-1"
+                                />
+                                <Button type="submit" size="icon" disabled={!newTodoTitle.trim()}>
+                                    <Plus className="h-4 w-4" />
+                                </Button>
+                            </form>
+
+                            {/* Todo list */}
+                            {!projectTodos || projectTodos.length === 0 ? (
+                                <p className="text-muted-foreground text-center py-8">
+                                    No checklist items yet. Add your first!
+                                </p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {projectTodos.map(todo => (
+                                        <div
+                                            key={todo.id}
+                                            className="flex items-center justify-between p-3 rounded-lg border bg-card/50 group"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <Checkbox
+                                                    checked={todo.completed}
+                                                    onCheckedChange={(checked) => {
+                                                        toggleTodoMutation.mutate({
+                                                            id: todo.id,
+                                                            completed: !!checked,
+                                                        });
+                                                    }}
+                                                />
+                                                <span className={todo.completed ? "line-through text-muted-foreground" : ""}>
+                                                    {todo.title}
+                                                </span>
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
+                                                onClick={() => deleteTodoMutation.mutate(todo.id)}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Progress bar */}
+                            {projectTodos && projectTodos.length > 0 && (
+                                <div className="pt-4 border-t">
+                                    <Progress
+                                        value={(projectTodos.filter(t => t.completed).length / projectTodos.length) * 100}
+                                        className="h-2"
+                                    />
                                 </div>
                             )}
                         </CardContent>
